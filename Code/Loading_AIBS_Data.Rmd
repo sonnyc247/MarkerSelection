@@ -1,0 +1,72 @@
+---
+title: "Loading_AIBS_Data"
+author: "Anukrati, Sonny (Edited for use)"
+date: "4/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r loading data}
+
+#download 2019 data from AIBS scRNAseq portal
+#download scrattch.io package from the https://github.com/AllenInstitute/scrattch/
+#devtools::install_github("AllenInstitute/scrattch")
+#scrattch::install_scrattch()
+#library(scrattch)
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("rhdf5")
+
+BiocManager::install("rhdf5")
+library(rhdf5)
+devtools::install_github("AllenInstitute/scrattch.io")
+library(scrattch.io)
+#library(Seurat)
+human_url = 'https://transcriptomic-viewer-downloads.s3-us-west-2.amazonaws.com/human/transcriptome.zip'
+download_dir = '/external/rprshnas01/netdata_kcni/stlab/AIBS_scRNAseq_2019/human/'
+download_dir = '/external/rprshnas01/kcni/ychen/References/AIBS_scRNAseq_2019/Human/'
+download.file(human_url, destfile = paste0(download_dir, 'transcriptome.zip'), mode = 'wb')
+###The download link will be download_dir = '/external/rprshnas01/netdata_kcni/stlab/AIBS_scRNAseq_2019/human/'###
+tome        <- paste0(download_dir, 'transcrip.tome')
+tome_sample_name <- read_tome_sample_names(tome)  
+tome_sample_meta <- read_tome_anno(tome)
+tome_gene_name   <- read_tome_gene_names(tome)
+#Access in data frame the cpm values per cluster
+cluster_list <- unique(tome_sample_meta$cluster_label)
+#cluster_list <- c("Inh L2-4 VIP DSEL","Inh L6 LAMP5 ANKRD20A11P","Inh L1 VIP SOX11","Inh L1 ADARB2 DISP2")
+tome_avg_expr <- data.frame(expr_vals = numeric(), cluster = character())
+for (cluster_name in cluster_list){
+  tome_sample_name_temp <- tome_sample_meta %>% filter(cluster_label == cluster_name) %>% 
+    pull(sample_name)
+  tome_temp <- read_tome_sample_data(tome, tome_sample_name_temp, regions = "both",
+                                            units = "cpm", transform = "log2", format = "matrix")
+  tome_expr <- rowMeans(tome_temp)
+  temp_df = data.frame(expr_vals = tome_expr, cluster = cluster_name)
+  tome_avg_expr = rbind(tome_avg_expr, temp_df) 
+  h5closeAll()
+}
+#To get group averages per cluster
+#Mean
+tome_avg_expr %>% group_by(cluster) %>% summarise_all(list(avg= mean))
+#Median
+tome_avg_expr %>% group_by(cluster) %>% summarise_all(list(med= median))
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
