@@ -1,0 +1,73 @@
+---
+title: "Finding markers with SCMarker"
+author: "Sonny"
+output: html_notebook
+---
+
+This notebook/script places after "Loading_AIBS_Data.Rmd", and was written after "Seurat_Implementation.rmd", though it should be independent of the latter. We are now trying to find cell subclass markers with SCMarker and the AIBS data. 
+
+### Installing the package
+
+First, we install the SCMarker package, which is not trivial if working with R 3.6+ (as of the time of writing this document). 
+
+For installtion in R 3.5 or earlier, the either of the following (untested by Sonny) two pairs of lines of code should work:
+
+```{r, old R installation of SCMarker}
+
+library(devtools)
+install_github("KChen-lab/SCMarker")
+
+install.packages("remotes")
+remotes::install_github("KChen-lab/SCMarker")
+
+```
+
+
+For installation in R 3.6+, we need both bash and r code; we need to download and install the package rather than go through simple r installtion commands.
+
+
+In bash, we do the following (code not actually run/tested for this document, since code was already run by the time of writing up this document).
+
+We first allow bash script in this rmd.
+
+```{r, lang_setup}
+
+knitr::knit_engines
+names(knitr::knit_engines$get())
+
+```
+
+Now in bash, we download the package in the working directory of this project.
+
+```{bash, download package}
+
+git clone https://github.com/KChen-lab/SCMarker.git
+
+```
+
+We can now build and install the package (code not actually run/tested for this document, since code was already run by the time of writing up this document).
+
+```{r, SCMarker package build and installation}
+
+library(devtools)
+build("SCMarker")
+#this should generate a .tar.gz file in your working directory. You can then install this in RStudio by graphic interface (packages tab, click install, etc.)
+
+```
+
+### Running the package/finding markers
+
+We can now try using the package to find markers. Code developed/adjusted from https://github.com/KChen-lab/SCMarker. From their code, we seem to simply need to input a count matrix, formatted as a matrix (and not a dataframe).
+
+```{r, finding markers}
+
+library(SCMarker)
+
+res=ModalFilter(data= as.matrix(AIBS_Rawcount_InEx[1:10000,1:10000]) ,geneK=10,cellK=10,width=2)#from package creators: default width = 1 for UMI data, width =2 for TPM data.
+res=GeneFilter(obj=res)
+res=getMarker(obj=res,k=300,n=30)
+head(res$marker)
+
+
+```
+

@@ -1,0 +1,121 @@
+---
+title: "Marker evaluation and comparisons"
+author: "Sonny"
+output: html_notebook
+---
+
+This notebook contains code and work evaluating marker gene lists, both internally and against other lists. For the example in this notebook, we are evaluating the reults from "Seurat_Implementation.Rmd".  
+
+First, we want to compare our results to previous/other marker gene lists. To do this, we load the data and convert it to a dataframe comparable to our Seurat results.
+
+```{r, comparing lists}
+
+human_markers_quick_sel <- readRDS("~/git/MarkerSelection/Data/human_markers_quick_sel.rds") #loading a previous marker gene list we've been working with in our lab
+
+human_markers_quick_sel #see the previous list of markers
+
+# we want to convert this list into a dataframe comparable with our Seurat results
+
+human_markers_quick_sel_df <- Seu_AIBS_markers_filtered[0,c("cluster", "gene")] #initializing a blank df, based on Seurat result df [1]
+
+for (cluster_name in names(human_markers_quick_sel)) { #for each cell grouping
+  
+  temp_df <- as.data.frame(human_markers_quick_sel[cluster_name]) #convert list to a dataframe
+  temp_df$cluster <-cluster_name #add cell grouping/cluster/etc. as a second column of values
+  temp_df <- temp_df[,c(2,1)] #reverse order of columns
+  colnames(temp_df)[2] <- "gene" #name the column of marker genes
+  
+  #now we can add this structure-converted list of gene markers to our df initialized in [1] (line 19)
+  human_markers_quick_sel_df <- rbind(human_markers_quick_sel_df, temp_df) 
+  
+  }
+
+remove(temp_df) #we can get rid of the temporary df
+
+head(human_markers_quick_sel_df) #we can now see the converted list of gene markers in df format
+
+```
+
+Now we just need to convert the "cluster"/grouping names to match between our reference list and our results/Seurat list.
+For now, we do this manually due to the complexity and differences between the two lists. 
+The reference names can be converted to the result names or vice-versa, we do the latter because it has more cell groups and multiple cell groups from it can compare to one in the reference cell-group.'
+
+```{r, converting grouping variable}
+
+# if there are multiple iterations of results, like in the later parts of Seurat_Implementation.Rmd, we can select which iteration to use and/or filter for comparisons
+
+Seu_AIBS_markers_filtered <- Seu_AIBS_markers_it3
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- Seu_AIBS_markers_filtered$cluster #copy the cluster column to start a new column of adapted cluster names
+
+unique(human_markers_quick_sel_df$cluster) #these are the reference names that we want to adapt/convert to
+unique(Seu_AIBS_markers_filtered$cluster) #these are the names that we want to change to match the above
+
+# manual replacements:
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Astro_FGFR3", "Astrocyte")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Endo_CLDN5", "Endothelial")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Micro_C1QC", "Microglia")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "OPC_MYT1", "OPC")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Inh_PVALB", "PVALB")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Inh_SST", "SST")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Inh_VIP", "VIP")
+
+# multi-replacements (also manual):
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Inh_LAMP5", "LAMP5.PAX6.Other")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Inh_PAX6", "LAMP5.PAX6.Other")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Oligo_MOBP", "Oligo")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Oligo_OPALIN", "Oligo")
+
+Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Exc_FEZF2", "Pyramidal")
+
+```
+
+Now we can compare the two lists.
+
+```{r, list comparison}
+
+for (cluster_name in unique(Seu_AIBS_markers_filtered$adapted_cluster_name)) { #for each group (subclass, in this case)
+  
+  ref_num <- length(human_markers_quick_sel_df[human_markers_quick_sel_df$cluster == cluster_name, "gene"]) #number of marker genes in reference
+  res_num <- length(Seu_AIBS_markers_filtered[Seu_AIBS_markers_filtered$adapted_cluster_name == cluster_name, "gene"]) #number of marker genes in results
+  inter_num <- length(intersect(human_markers_quick_sel_df[human_markers_quick_sel_df$cluster == cluster_name, "gene"] ,Seu_AIBS_markers_filtered[Seu_AIBS_markers_filtered$adapted_cluster_name == cluster_name, "gene"])) #number of overlapping marker genes
+  
+  print(c(cluster_name, ref_num, res_num, inter_num)) #print the results
+  
+  }
+
+```
+
+We can also check how correlated all the queried subclasses are to one another based on gene averages per group.
+
+```{r, group averages and their correlations to one another}
+
+# since our data is already in Seurat, we can use its functions for getting group averages
+
+library(Seurat) #if needed (if it is not loaded when you need to run the code below)
+
+Group_averages <- AverageExpression(Seu_AIBS_obj) #getting group averages (returns a list of 1 df)
+Group_averages <- Group_averages$RNA #extracting the dataframe format of the results
+
+Group_correlations <- cor(Group_averages, method = "spearman") #getting spearman coefficients of our query groups
+
+# to visualize the confusion matrix/find most similar groups, we can plot/make a dendrogram
+
+heatmap(Group_correlations) #one way/function to plot/make the dendrogram
+
+library(gplots)
+heatmap.2(Group_correlations) #another way to plot/make the dendrogram
+
+```
+
