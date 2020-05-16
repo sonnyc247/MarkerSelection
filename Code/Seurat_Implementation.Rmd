@@ -38,16 +38,61 @@ Seu_AIBS_obj[["RNA"]]@data #see our normalized data
 
 ```
 
+Sometimes, at this stage (or to do a new analysis on slightly-altered Seurat object), you may realize you want to further change your data in the Seurat. You can do this without going back to the metadata df or the count matrix with Seurat functions.
+
+```{r, modifying Seurat object before finding markers}
+
+Idents(Seu_AIBS_obj) <- "query_subclass" #apply/assign our identity labels of interest to cells (we would just do this if there were no modifications to be made to the Seurat object)
+
+### somtimes, we might want to change the way we group our cells
+
+Seu_AIBS_obj$it2_query_subclass <- Idents(Seu_AIBS_obj) #making a new identity variable; starting by copying the previous active idents (which was "query_subclass" at the time); this needs the first command in this chunk (line 45) to be run first; we are effectively making a copy of "query_subclass" here
+
+levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Oligo_MOBP"] <- "Oligo" #collapsing the oligo groups
+levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Oligo_OPALIN"] <- "Oligo" #collapsing the oligo groups
+
+levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_RORB"] <- "Pyramidal" #collapsing the exc groups
+levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_LINC00507"] <- "Pyramidal" #collapsing the exc groups
+levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_FEZF2"] <- "Pyramidal" #collapsing the exc groups
+levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_THEMIS"] <- "Pyramidal" #collapsing the exc groups
+
+Idents(Seu_AIBS_obj) <- "it2_query_subclass" #setting the active identity (the grouping variable that Seurat will use to distinguish between groups of cells, for calculating cell markers) to the new set of identity variables
+
+### sometimes, we might want to further filter out some cells from our analyses
+
+Seu_AIBS_obj <- subset(Seu_AIBS_obj, idents = c("Inh_ADARB2", "Inh_LHX6"), invert = TRUE) #we want all cells except for these two groups
+
+```
+
+The collapsing of the group names is to help us compare to a reference marker list later on (see Marker_evaluation notebook for more details).
+The removal of interneuron clusters ADARB2 and LHX6 is due to our evaluation of the information from https://celltypes.brain-map.org/rnaseq/human_ctx_smart-seq , which suggests that these two groups/markers may not clearly delineate from the others in our analysis.
+
 We are now ready to find cell markers.
-To find markers (for cell subclass), we assign the appropriate identity to the cells/samples, and calculate markers.
+To find markers (for cell subclass), we assign the appropriate identity to the cells/samples, and calculate markers by using the FindAllMarkers function. There are many arguments/thresholds we can use in this case, and to determine the best thresholds to use, we may want to check on the characteristic metrics (such what percentage of a group of cells express a gene) of key, cluster-defining markers. For our (demonstration) purposes, our key markers are LAMP5, VIP, SST, SLC17A7, and PVALB.
 
 ```{r, find markers}
 
 Idents(Seu_AIBS_obj) <- "query_subclass" #apply/assign our identity labels of interest to cells
+Idents(Seu_AIBS_obj) <- "it2_query_subclass" #apply/assign our modified/edited identity labels instead, if desired (we do, for this example)
+
+### there are multiple options to find markers initially
+
+# do all comparisons, using defaults (Wilcoxon rank-sum test)
 Seu_AIBS_markers <- FindAllMarkers(object = Seu_AIBS_obj) # if computational resources/time is not an issue, using all default settings
 
 # if time/resources are an issue, you may need to find markers for each group separately, such as by the example code below:
 Seu_AIBS_SST_markers <- FindMarkers(Seu_AIBS_obj, ident.1 = "Oligo_OPALIN") #this is not run for the generation of this notbook
+
+# however, for us, we want to use MAST for single-cell datasets
+
+BiocManager::install("MAST")
+library("MAST")
+
+Seu_AIBS_markers_screen <- FindAllMarkers(Seu_AIBS_obj, logfc.threshold = .1, min.pct = .1, only.pos = TRUE, return.thresh = .05, test.use = "MAST") # we use this as a dummy run; we don't care about the results per se, but rather the fold-changes and detected percentages of key markers in their cannonical groups (e.g: SST in SST cluster) 
+
+# finding the most lenient parameters that would allow us to detect the key markers (derived from the results of Seu_AIBS_markers_liberal), we can rerun the test with these parameters
+
+Seu_AIBS_markers <- FindAllMarkers(Seu_AIBS_obj, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST")
 
 ```
 
@@ -69,39 +114,14 @@ However, the above is just a general, one-pass attempt at getting markers using 
 
 ```{r, a reiteration with changed parameters}
 
-Seu_AIBS_markers_it1 <- Seu_AIBS_markers #save away the old results
+# trying different threshold parameters based on AIBS workflow, brought to our attention by Jordan Sicherman 
 
-### somtimes, we might want to change the way we group our cells
+Seu_AIBS_markers_stringent <- FindAllMarkers(object = Seu_AIBS_obj_it2, slot = "data", logfc.threshold = 1, test.use = "MAST", min.pct = .7, min.diff.pct = .8, only.pos = TRUE, return.thresh = .05) 
 
-Seu_AIBS_obj$it2_query_subclass <- Idents(Seu_AIBS_obj) #making a new identity variable; starting by copying the previous active idents (which was "query_subclass" at the time)
+# trying a different test for comparing gene expression between different groups, also usable in Seurat
 
-levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Oligo_MOBP"] <- "Oligo" #collapsing the oligo groups
-levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Oligo_OPALIN"] <- "Oligo" #collapsing the oligo groups
-
-levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_RORB"] <- "Pyramidal" #collapsing the exc groups
-levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_LINC00507"] <- "Pyramidal" #collapsing the exc groups
-levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_FEZF2"] <- "Pyramidal" #collapsing the exc groups
-levels(Seu_AIBS_obj$it2_query_subclass)[levels(Seu_AIBS_obj$it2_query_subclass)=="Exc_THEMIS"] <- "Pyramidal" #collapsing the exc groups
-
-Idents(Seu_AIBS_obj) <- "it2_query_subclass" #setting the active identity to the new set of identity variables
-
-### sometimes, we might want to further filter out some cells from our analyses
-
-Seu_AIBS_obj_it2 <- subset(Seu_AIBS_obj, idents = c("Inh_ADARB2", "Inh_LHX6"), invert = TRUE) #we want all cells except for these two groups
-
-### now we find markers again, but we might want to change parameters
-
-BiocManager::install("MAST") #we want to use this DE test in FindAllMarkers this time
-library("MAST")
-
-Seu_AIBS_markers_it2 <- FindAllMarkers(object = Seu_AIBS_obj_it2, slot = "data", logfc.threshold = 1, test.use = "MAST", min.pct = .7, min.diff.pct = .8, only.pos = TRUE, return.thresh = .05) #parameters based on AIBS workflow, brought to our attention by Jordan Sicherman 
-
-# that was quick, perhaps due to stringent thresholds, can keep trying different iterations:
-
-Seu_AIBS_markers_it3 <- FindAllMarkers(Seu_AIBS_obj_it2, logfc.threshold = 1, min.pct = .7, only.pos = TRUE, return.thresh = .05, test.use = "MAST")
-
-Seu_AIBS_markers_it4 <- FindAllMarkers(Seu_AIBS_obj_it2, logfc.threshold = 1, min.pct = .7, only.pos = TRUE, return.thresh = .05)
+Seu_AIBS_markers_roc <- FindAllMarkers(Seu_AIBS_obj_it2, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc")
 
 ```
 
-This is the end of this notebook for now. We can now take this list of markers and evaluate them or use them for other analyses.
+This is the end of this notebook for now. We can now take this list of markers and evaluate them or use them for other analyses. For quicker iteration of this workflow, you can look at our iteration of this process looking at MTG neurons instead of ACC neurons in Code/MTG_analysis.R, though it is less documented/explained, it follows the same steps detailed in this notebook.

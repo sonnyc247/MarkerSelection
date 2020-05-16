@@ -6,7 +6,24 @@ output: html_notebook
 
 This notebook contains code and work evaluating marker gene lists, both internally and against other lists. For the example in this notebook, we are evaluating the reults from "Seurat_Implementation.Rmd".  
 
-First, we want to compare our results to previous/other marker gene lists. To do this, we load the data and convert it to a dataframe comparable to our Seurat results.
+First, we can do a quick check that no genes were determined to be markers for more than one group. The fastest way to do this is to check that all "gene" values are unique.
+
+```{r, unique marker check}
+
+# if there are multiple iterations/versions of results, like in the later parts of Seurat_Implementation.Rmd, we can select which iteration to use and/or filter for comparisons (instead of Seu_AIBS_markers)
+
+length(unique(Seu_AIBS_markers$gene)) #this shows us that the number of unique gene entries are different compared to the number of rows, indicating duplicates
+duplicated_markers <- Seu_AIBS_markers[duplicated(Seu_AIBS_markers$gene),"gene"] #get list of duplicated markers
+Seu_AIBS_markers[Seu_AIBS_markers$gene %in% duplicated_markers,] #see the rows with duplicated markers
+Seu_AIBS_markers_filtered <- Seu_AIBS_markers[!(Seu_AIBS_markers$gene %in% duplicated_markers),] #remove duplicated markers
+
+# if using MTG results, for example
+duplicated_markers <- Seu_AIBS_markers_MTG[duplicated(Seu_AIBS_markers_MTG$gene),"gene"] #get list of duplicated markers
+Seu_AIBS_markers_filtered <- Seu_AIBS_markers_MTG[!(Seu_AIBS_markers_MTG$gene %in% duplicated_markers),] #remove duplicated markers
+
+```
+
+Now we want to compare our results to previous/other marker gene lists. To do this, we load the data and convert it to a dataframe comparable to our Seurat results.
 
 ```{r, comparing lists}
 
@@ -42,10 +59,6 @@ The reference names can be converted to the result names or vice-versa, we do th
 
 ```{r, converting grouping variable}
 
-# if there are multiple iterations of results, like in the later parts of Seurat_Implementation.Rmd, we can select which iteration to use and/or filter for comparisons
-
-Seu_AIBS_markers_filtered <- Seu_AIBS_markers_it3
-
 Seu_AIBS_markers_filtered$adapted_cluster_name <- Seu_AIBS_markers_filtered$cluster #copy the cluster column to start a new column of adapted cluster names
 
 unique(human_markers_quick_sel_df$cluster) #these are the reference names that we want to adapt/convert to
@@ -73,11 +86,7 @@ Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_
 
 Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Inh_PAX6", "LAMP5.PAX6.Other")
 
-Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Oligo_MOBP", "Oligo")
-
-Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Oligo_OPALIN", "Oligo")
-
-Seu_AIBS_markers_filtered$adapted_cluster_name <- replace(as.character(Seu_AIBS_markers_filtered$adapted_cluster_name), Seu_AIBS_markers_filtered$adapted_cluster_name == "Exc_FEZF2", "Pyramidal")
+unique(Seu_AIBS_markers_filtered$adapted_cluster_name) #see our adapted cluster/group names
 
 ```
 
@@ -93,11 +102,74 @@ for (cluster_name in unique(Seu_AIBS_markers_filtered$adapted_cluster_name)) { #
   
   print(c(cluster_name, ref_num, res_num, inter_num)) #print the results
   
+  print("")
+  
+  print(intersect(human_markers_quick_sel_df[human_markers_quick_sel_df$cluster == cluster_name, "gene"] ,Seu_AIBS_markers_filtered[Seu_AIBS_markers_filtered$adapted_cluster_name == cluster_name, "gene"])) #print list of overlapping marker genes
+  
+  print("")
+  
   }
 
 ```
 
-We can also check how correlated all the queried subclasses are to one another based on gene averages per group.
+Similarly, we can compare the results from different analyses done by Seurat with our dataset (in this case, MAST vs roc or ACC vs MTG, which we performed in Seurat_Implementation) selected in the FindAllMarkers function.
+
+```{r, multi-test comparison}
+
+Seu_AIBS_markers_multicomp <- Seu_AIBS_markers_roc # to compare vs ACC roc
+Seu_AIBS_markers_multicomp <- Seu_AIBS_markers_MTG # to compare vs MTG MAST
+Seu_AIBS_markers_multicomp <- Seu_AIBS_markers_MTGroc # to compare vs MTG roc
+
+for (cluster_name in unique(Seu_AIBS_markers_filtered$cluster)) { #for each group (subclass, in this case)
+  
+  ref_num <- length(unique(Seu_AIBS_markers_multicomp[Seu_AIBS_markers_multicomp$cluster == cluster_name, "gene"])) #number of marker genes in reference
+  res_num <- length(Seu_AIBS_markers_filtered[Seu_AIBS_markers_filtered$cluster == cluster_name, "gene"]) #number of marker genes in results
+  inter_num <- length(intersect(unique(Seu_AIBS_markers_multicomp[Seu_AIBS_markers_multicomp$cluster == cluster_name, "gene"]) ,Seu_AIBS_markers_filtered[Seu_AIBS_markers_filtered$cluster == cluster_name, "gene"])) #number of overlapping marker genes
+  
+  print(c(cluster_name, ref_num, res_num, inter_num)) #print the results
+  
+  print("")
+  
+  print(intersect(Seu_AIBS_markers_multicomp[Seu_AIBS_markers_multicomp$cluster == cluster_name, "gene"] ,Seu_AIBS_markers_filtered[Seu_AIBS_markers_filtered$cluster == cluster_name, "gene"])) #print list of overlapping marker genes, if desired
+  
+  print("")
+  
+  }
+
+
+```
+
+Since the matches are so close between ACC-MAST results and the ACC-roc results, we can combine the two (the the downstream user/assessor can filter/use whichever they want).
+
+```{r, combining MAST and roc, getting output result}
+
+# we are using the "_multicomp" df to allow for flexibility upstream to use other df instead of "_roc", such as "_MTGroc"; similarly, we are making a result DF instead of a specifically named result df for most of the code below
+
+duplicated_markers <- Seu_AIBS_markers_multicomp[duplicated(Seu_AIBS_markers_multicomp$gene),"gene"] #get list of duplicated markers from the roc test
+Seu_AIBS_markers_multicomp[Seu_AIBS_markers_multicomp$gene %in% duplicated_markers,] #see the rows with duplicated markers
+roc_df <- Seu_AIBS_markers_multicomp[!(Seu_AIBS_markers_multicomp$gene %in% duplicated_markers),] #remove duplicated markers
+Result_df <- merge(Seu_AIBS_markers_filtered[,c(1,5,7,8)], roc_df, by = "gene", all.x = TRUE, all.y = TRUE) #combine the marker df
+Result_df <- Result_df[,c(1,10,4,8,9,6,2,3,5,7)] #reorder columns
+colnames(Result_df)[c(6:10)] <- c("avg_logFC","MAST_p_val","MAST_p_val_adj", "roc_myAUC", "roc_power") #rename columns to clarify which test generated which statistic
+
+# finally, we want to add entrez IDs to the output/result df
+# our mgi-to-entrez ID conversion comes from a file from AIBS http://celltypes.brain-map.org/api/v2/well_known_file_download/694416044
+
+human_MTG_2018_06_14_genes_rows <- read_csv("~/git/MarkerSelection/Data/Inputs/human_MTG_2018-06-14_genes-rows.csv") #loading the conversion data
+Result_df <- merge(Result_df, human_MTG_2018_06_14_genes_rows[,c(1,3)], by = "gene") #add entrez ids
+Result_df <- Result_df[,c(1,11,2:10)] #reorder columns
+
+ACC_results <- Result_df #store the results
+MTG_results <- Result_df #store the results
+
+write.csv(ACC_results, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/ACC_results.csv")
+write.csv(MTG_results, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/MTG_results.csv")
+
+```
+
+There are some other checks/visualizations we can do of the data as well.
+
+We can check how correlated all the queried subclasses are to one another based on gene averages per group.
 
 ```{r, group averages and their correlations to one another}
 
@@ -119,3 +191,76 @@ heatmap.2(Group_correlations) #another way to plot/make the dendrogram
 
 ```
 
+Similarly, we can see how markers correlate to one another, visualized by a dendrogram.
+
+```{r, marker intercorrelation}
+
+# we can take all cells from our Seurat object
+
+AIBS_lnCPM_InEx_ACC <- as.data.frame(Seu_AIBS_obj_ACC_it2[["RNA"]]@data) #get lnCPM matrix
+
+# or we might want to look at correlations only within a cell group, Inh_SST cells in this case
+
+Seu_AIBS_obj_temp <- subset(Seu_AIBS_obj, idents = "Inh_SST") #we want all cells except for these two groups
+AIBS_lnCPM_InEx_ACC <- as.data.frame(Seu_AIBS_obj_temp[["RNA"]]@data) #get lnCPM matrix
+remove(Seu_AIBS_obj_temp)
+
+# whichever lnCPM matrix you select, we can subset for our genes of interest and calculate + plot the correlations
+
+Marker_matrix <- t(AIBS_lnCPM_InEx_ACC[row.names(AIBS_lnCPM_InEx_ACC) %in% unique(ACC_results[ACC_results$cluster == "Inh_SST","gene"]),]) #subset for markers of interest
+
+Marker_matrix <- as.matrix((Marker_matrix > 0) + 0) #if we instead want to work with a binary present/absent matrix (optional)
+
+Marker_correlations <- cor(Marker_matrix, method = "spearman") #getting spearman coefficients of our query groups
+
+heatmap(Marker_correlations) #one way/function to plot/make the dendrogram
+
+```
+
+
+We can also see how markers within a cell group might look on a dendrogram just based on their expression.
+
+```{r, marker dendrogram}
+
+Group_averages <- AverageExpression(Seu_AIBS_obj_ACC_it2) #getting group averages (returns a list of 1 df)
+Group_averages <- Group_averages$RNA #extracting the dataframe format of the results
+
+unique(ACC_results$cluster) #see options for which group we want to look at
+Group_averages <- Group_averages[row.names(Group_averages) %in% unique(ACC_results[ACC_results$cluster == "Inh_SST","gene"]),] #subset for marker genes
+
+heatmap(as.matrix(Group_averages))
+
+```
+
+This may be better visualized in a group dot plot. We can construct this based on code from AIBS
+
+```{r, group dot plot}
+
+devtools::install_github("AllenInstitute/scrattch.vis") # as needed
+library(scrattch.vis)
+options(stringsAsFactors = F) # following https://github.com/AllenInstitute/scrattch.vis
+
+AIBS_lnCPM_InEx_ACC <- t(as.data.frame(Seu_AIBS_obj_ACC_it2[["RNA"]]@data)) #get transposed lnCPM matrix
+
+library(tibble)
+AIBS_lnCPM_InEx_ACC <- rownames_to_column(as.data.frame(AIBS_lnCPM_InEx_ACC))
+colnames(AIBS_lnCPM_InEx_ACC)[1] <- "sample_name"
+rownames(AIBS_lnCPM_InEx_ACC) <- AIBS_lnCPM_InEx_ACC$sample_name
+
+gdp_anno <- tome_sample_meta_filtered
+colnames(gdp_anno)[35] <- "query_subclass_label"
+gdp_anno$query_subclass_id <- gdp_anno$query_subclass_label
+gdp_anno$query_subclass_color <- "#C8C8C8"
+
+group_dot_plot(AIBS_lnCPM_InEx_ACC, 
+               gdp_anno, 
+               genes = c("PVALB","SST"), 
+               grouping = "query_subclass", 
+               log_scale = TRUE,
+               font_size = 10,
+               max_size = 10,
+               rotate_counts = TRUE)
+
+```
+
+This is the end of this notebook/our current workflow.
