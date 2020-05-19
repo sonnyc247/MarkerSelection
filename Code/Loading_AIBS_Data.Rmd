@@ -1,7 +1,7 @@
 ---
 title: "Loading AIBS Data"
 author: "Anukrati, Sonny (Edited for use)"
-output: html_notebook
+output: html_document
 ---
 
 This document details the code for loading AIBS human brain data. The some code came from Anukrati Nigam, edited for Sonny Chen's use/the write-up of this notebook.

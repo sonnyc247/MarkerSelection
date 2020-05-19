@@ -1,8 +1,7 @@
 ---
 title: "Finding markers with Seurat"
 author: "Sonny"
-output: html_notebook
----
+output: html_document
 ---
 
 This notebook/script places after "Loading_AIBS_Data.Rmd". We are now finding cell subclass markers with Seurat and the AIBS data. 
@@ -90,6 +89,8 @@ library("MAST")
 
 Seu_AIBS_markers_screen <- FindAllMarkers(Seu_AIBS_obj, logfc.threshold = .1, min.pct = .1, only.pos = TRUE, return.thresh = .05, test.use = "MAST") # we use this as a dummy run; we don't care about the results per se, but rather the fold-changes and detected percentages of key markers in their cannonical groups (e.g: SST in SST cluster) 
 
+write.csv(Seu_AIBS_markers_screen, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/lenient_ACC_results.csv") #save results
+
 # finding the most lenient parameters that would allow us to detect the key markers (derived from the results of Seu_AIBS_markers_liberal), we can rerun the test with these parameters
 
 Seu_AIBS_markers <- FindAllMarkers(Seu_AIBS_obj, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST")
@@ -116,12 +117,41 @@ However, the above is just a general, one-pass attempt at getting markers using 
 
 # trying different threshold parameters based on AIBS workflow, brought to our attention by Jordan Sicherman 
 
-Seu_AIBS_markers_stringent <- FindAllMarkers(object = Seu_AIBS_obj_it2, slot = "data", logfc.threshold = 1, test.use = "MAST", min.pct = .7, min.diff.pct = .8, only.pos = TRUE, return.thresh = .05) 
+Seu_AIBS_markers_stringent <- FindAllMarkers(object = Seu_AIBS_obj_ACC_it2, slot = "data", logfc.threshold = 1, test.use = "MAST", min.pct = .7, min.diff.pct = .8, only.pos = TRUE, return.thresh = .05) 
 
 # trying a different test for comparing gene expression between different groups, also usable in Seurat
 
-Seu_AIBS_markers_roc <- FindAllMarkers(Seu_AIBS_obj_it2, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc")
+Seu_AIBS_markers_roc <- FindAllMarkers(Seu_AIBS_obj_ACC_it2, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc")
 
 ```
+
+We can also try finding markers by systematically doing pairwise comparisons between all groups.
+
+```{r, pairwise}
+
+paircomp_groups <- unique(Idents(Seu_AIBS_obj_ACC_it2)) #get list of all groups
+query_group <- "Inh_SST" #set group of interest
+paircomp_groups = paircomp_groups[!paircomp_groups %in% query_group] #remove group of interest from list of cell groups
+
+Seu_AIBS_pair_ACC_SST <- data.frame(p_val=double(),
+                 avg_logFC=double(),
+                 pct.1=double(),
+                 pct.2=double(),
+                 p_val_adj=double(),
+                 group_2=character(),
+                 stringsAsFactors=FALSE) #initialize blank result df
+
+for (cluster_name in paircomp_groups) {
+
+  temp_df <- FindMarkers(object = Seu_AIBS_obj_ACC_it2, ident.1 = query_group, ident.2 = cluster_name, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, test.use = "MAST") #get results for pairwise comparison between group of interest and current group in loop
+  temp_df$group_2 <- cluster_name #add new column indicating the comparator/group 2
+  Seu_AIBS_pair_ACC_SST <- rbind(Seu_AIBS_pair_ACC, temp_df) #add results to overall result df
+
+}
+ 
+write.csv(Seu_AIBS_pair_ACC_SST, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/pairwise_ACC_SST_results.csv") #save results
+
+```
+
 
 This is the end of this notebook for now. We can now take this list of markers and evaluate them or use them for other analyses. For quicker iteration of this workflow, you can look at our iteration of this process looking at MTG neurons instead of ACC neurons in Code/MTG_analysis.R, though it is less documented/explained, it follows the same steps detailed in this notebook.

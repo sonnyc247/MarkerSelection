@@ -1,7 +1,7 @@
 ---
 title: "Marker evaluation and comparisons"
 author: "Sonny"
-output: html_notebook
+output: html_document
 ---
 
 This notebook contains code and work evaluating marker gene lists, both internally and against other lists. For the example in this notebook, we are evaluating the reults from "Seurat_Implementation.Rmd".  
@@ -242,23 +242,37 @@ options(stringsAsFactors = F) # following https://github.com/AllenInstitute/scra
 
 AIBS_lnCPM_InEx_ACC <- t(as.data.frame(Seu_AIBS_obj_ACC_it2[["RNA"]]@data)) #get transposed lnCPM matrix
 
+# format count/expression matrix for group_dot_plot smooth running
 library(tibble)
-AIBS_lnCPM_InEx_ACC <- rownames_to_column(as.data.frame(AIBS_lnCPM_InEx_ACC))
-colnames(AIBS_lnCPM_InEx_ACC)[1] <- "sample_name"
-rownames(AIBS_lnCPM_InEx_ACC) <- AIBS_lnCPM_InEx_ACC$sample_name
+AIBS_lnCPM_InEx_ACC <- rownames_to_column(as.data.frame(AIBS_lnCPM_InEx_ACC)) #get sample names as a column
+colnames(AIBS_lnCPM_InEx_ACC)[1] <- "sample_name" #change column name of sample names (to match AIBS vignette on group_dot_plot)
+rownames(AIBS_lnCPM_InEx_ACC) <- AIBS_lnCPM_InEx_ACC$sample_name #reset df rownames as sample names as well, just in case
 
-gdp_anno <- tome_sample_meta_filtered
-colnames(gdp_anno)[35] <- "query_subclass_label"
-gdp_anno$query_subclass_id <- gdp_anno$query_subclass_label
-gdp_anno$query_subclass_color <- "#C8C8C8"
+# further adding and tweeking data in metadata dataframe to suite group_dot_plot
+gdp_anno <- as.data.frame(Seu_AIBS_obj_ACC_it2@meta.data) #create metadata copy for group_dot_plot
+
+colnames(gdp_anno)[39] <- "it2_query_subclass_label" #prepare "_label" needed for plotting
+gdp_anno$it2_query_subclass_label <- factor(gdp_anno$it2_query_subclass_label, levels = c("Inh_SST", "Inh_VIP", "Inh_PVALB", "Inh_LAMP5", "Inh_PAX6", "Pyramidal", "Astro_FGFR3", "Oligo",  "OPC_MYT1", "Micro_C1QC", "Peri_MUSTN1", "Endo_CLDN5", "VLMC_CYP1B1")) #setting factor order
+gdp_anno$it2_query_subclass_id <- gdp_anno$it2_query_subclass_label #prepare "_id" needed for plotting
+gdp_anno$it2_query_subclass_color <- gdp_anno$class_color #prepare "_color" needed for plotting; copy "class_color" for now
+
+# set which genes to plot
+
+gdp_markers <- ACC_results[ACC_results$adapted_cluster_name == "SST", "gene"] #get SST markers 
+gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabetically
+
+gdp_markers <- ACC_results[ACC_results$adapted_cluster_name == "PVALB", "gene"] #get PVALB markers 
+gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabetically
+
+# do the plot
 
 group_dot_plot(AIBS_lnCPM_InEx_ACC, 
                gdp_anno, 
-               genes = c("PVALB","SST"), 
-               grouping = "query_subclass", 
+               genes = gdp_markers, 
+               grouping = "it2_query_subclass", 
                log_scale = TRUE,
                font_size = 10,
-               max_size = 10,
+               max_size = 20,
                rotate_counts = TRUE)
 
 ```
