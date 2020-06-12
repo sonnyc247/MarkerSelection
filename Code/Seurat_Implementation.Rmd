@@ -91,7 +91,7 @@ Seu_AIBS_markers_screen <- FindAllMarkers(Seu_AIBS_obj, logfc.threshold = .1, mi
 
 write.csv(Seu_AIBS_markers_screen, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/lenient_ACC_results.csv") #save results
 
-# finding the most lenient parameters that would allow us to detect the key markers (derived from the results of Seu_AIBS_markers_liberal), we can rerun the test with these parameters
+# finding the most leniently-screened parameters that would allow us to detect the key markers (derived from the results of Seu_AIBS_markers_liberal), we can rerun the test with these parameters
 
 Seu_AIBS_markers <- FindAllMarkers(Seu_AIBS_obj, logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST")
 
