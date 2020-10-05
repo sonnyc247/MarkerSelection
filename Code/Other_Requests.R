@@ -187,3 +187,27 @@ colnames(Result_df)[c(3:11)] <- c("ensembl_id", "class", "pct.1", "pct.2", "avg_
 
 new_MTG_results_NeuNonN <- Result_df #store the results in R
 write.csv(new_MTG_results_NeuNonN, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTG_results_NeuNonN.csv") #save/export results
+
+
+# comparing cell type overlaps
+
+overlap_summary <- data.frame(Celltype=character(),
+                 CgG_total_markers=double(), 
+                 Overlapping_markers=double(),
+                 MTG_total_markers=double(),
+                 stringsAsFactors=FALSE) 
+
+for (i in 1:length(unique(new_AIBS_markers_roc_MTG$cluster))) {
+  
+  cellgroup <- as.character(unique(new_AIBS_markers_roc_MTG$cluster)[i])
+  temp_df <- new_AIBS_markers_roc_CgG[new_AIBS_markers_roc_CgG$cluster == cellgroup,] 
+  temp_df2 <- new_AIBS_markers_roc_MTG[new_AIBS_markers_roc_MTG$cluster == cellgroup,]
+  
+  overlap_summary[i,"Celltype"] <- cellgroup
+  overlap_summary[i,"CgG_total_markers"] <- nrow(temp_df)
+  overlap_summary[i,"Overlapping_markers"] <- length(intersect(temp_df$gene, temp_df2$gene))
+  overlap_summary[i,"MTG_total_markers"] <- nrow(temp_df2)
+ 
+}
+
+write.csv(overlap_summary, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/roc_overlap_summary.csv") #save/export results
