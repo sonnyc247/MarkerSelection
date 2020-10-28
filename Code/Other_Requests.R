@@ -262,8 +262,8 @@ mathys_markers_screen_mast[as.character(unique(Idents(Seu_mathys_obj))),] #see f
 
 # get markers
 
-mathys_markers_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 1.25, min.pct = .15, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
-mathys_markers_roc <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 1.25, min.pct = .15, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+mathys_markers_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.2, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+mathys_markers_roc <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.2, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
 
 #mathys_markers_stringent_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
 #mathys_markers_stringent_roc <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
@@ -271,7 +271,7 @@ mathys_markers_roc <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.thresh
 #check duplicates, overlaps, then consolidate
 
 length(unique(mathys_markers_mast$gene)) #check for unique marker genes
-length(unique(mathys_markers_stringent_mast$gene)) #check for unique marker genes
+length(unique(mathys_markers_roc$gene)) #check for unique marker genes
 
 mathys_markers_mast$clust_gene <- paste0(mathys_markers_mast$cluster,"_",mathys_markers_mast$gene) #make cluster-gene combo for match check
 mathys_markers_roc$clust_gene <- paste0(mathys_markers_roc$cluster,"_",mathys_markers_mast$gene)
@@ -285,4 +285,6 @@ Result_df <- Result_df[,c(2,3,8,4,6,9,10,7,5)] #reorder
 Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
 colnames(Result_df) <- colnames(new_CgG_results)
 
-write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/mathys_results.csv") #save/export results
+mathys_results <- Result_df #save results
+
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/mathys_results.csv") #export results
