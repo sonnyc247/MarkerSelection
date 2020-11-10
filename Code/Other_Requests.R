@@ -263,7 +263,7 @@ mathys_markers_screen_mast[as.character(unique(Idents(Seu_mathys_obj))),] #see f
 # get markers
 
 mathys_markers_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.2, min.pct = .25, only.pos = TRUE, test.use = "MAST") #find markers
-mathys_markers_roc_2 <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.2, min.pct = .25, only.pos = TRUE, test.use = "roc") #find markers using roc
+mathys_markers_roc <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.2, min.pct = .25, only.pos = TRUE, test.use = "roc") #find markers using roc
 
 #mathys_markers_stringent_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
 #mathys_markers_stringent_roc <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
@@ -290,11 +290,12 @@ mathys_results <- Result_df #save results
 write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/mathys_results.csv") #export results
 
 # get comparisons for DE genes with no thresholds
-mathys_markers_mega_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 0, min.pct = 0, only.pos = TRUE, test.use = "MAST")
+mathys_markers_mega_mast <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 0, min.pct = 0, only.pos = TRUE, return.thresh = 1, test.use = "MAST")
 
 # check and plot results
-
-mathys_markers_mega_mast$markercheck <- paste0(mathys_markers_mega_mast$cluster, "_", mathys_markers_mega_mast$gene)
+mathys_markers_mega_mast$clusterchar <- as.character(mathys_markers_mega_mast$cluster)
+mathys_markers_mega_mast[mathys_markers_mega_mast$clusterchar == "L5.6.NP","clusterchar"] <- "L5/6 NP"
+mathys_markers_mega_mast$markercheck <- paste0(mathys_markers_mega_mast$clusterchar, "_", mathys_markers_mega_mast$gene)
 test <- new_CgG_results
 test$markercheck <- paste0(test$subclass, "_", test$gene)
 length(intersect(mathys_markers_mega_mast$markercheck, test$markercheck))
@@ -305,15 +306,102 @@ mathys_markers_mega_mast[mathys_markers_mega_mast$p_val_adj < 0.05, "volcano_gro
 
 for (cellgroup in unique(new_CgG_results$subclass)){
   temp_markers <- new_CgG_results[new_CgG_results$subclass == cellgroup, "gene"]
-  mathys_markers_mega_mast[((mathys_markers_mega_mast$cluster == cellgroup) &
+  mathys_markers_mega_mast[((mathys_markers_mega_mast$clusterchar == cellgroup) &
                             (mathys_markers_mega_mast$gene %in% temp_markers))  
                               , "volcano_group"] <- "Hodge marker"
 } 
 
 table(mathys_markers_mega_mast$volcano_group)
 
+table(mathys_markers_mega_mast[mathys_markers_mega_mast$volcano_group == "Hodge marker", "cluster"])
+table(new_CgG_results[new_CgG_results$subclass %in% unique(mathys_markers_mega_mast$clusterchar),"subclass"])
+
+mathys_average <- AverageExpression(Seu_mathys_obj)
+mathys_average <- mathys_average$RNA
+
+mathys_markers_mega_mast[mathys_markers_mega_mast$volcano_group == "Hodge marker" & mathys_markers_mega_mast$cluster == "IT",]
+
+intersect(mathys_markers_mega_mast[mathys_markers_mega_mast$cluster == "SST", "gene"],new_CgG_results[new_CgG_results$subclass == "SST", "gene"])
+setdiff(new_CgG_results[new_CgG_results$subclass == "IT", "gene"], mathys_markers_mega_mast[mathys_markers_mega_mast$cluster == "IT", "gene"])
+
+intersect(test[(test$gene %in% row.names(mathys_average)) &
+               (test$subclass %in% unique(mathys_markers_mega_mast$clusterchar))
+                 ,"markercheck"], mathys_markers_mega_mast$markercheck)
+
+mathys_markers_mega_mast$p_val_adj_forplot <- log10(mathys_markers_mega_mast$p_val_adj)*(-1)
+mathys_markers_mega_mast[mathys_markers_mega_mast$p_val_adj_forplot == Inf, "p_val_adj_forplot"] <- 400
+
 library(ggplot2)
 
-ggplot(mathys_markers_mega_mast, aes(x=avg_logFC, y= log10(p_val_adj)*(-1), color=volcano_group)) + 
+ggplot(mathys_markers_mega_mast[mathys_markers_mega_mast$volcano_group == "Hodge marker",], aes(x=avg_logFC, y= p_val_adj_forplot, color=volcano_group)) + 
   geom_point(size = 1) +
-  facet_wrap(~cluster, scales = "free")
+  facet_wrap(~cluster, scales = "fixed") +
+  theme(legend.position = "none")
+
+#### Seurat data integration ####
+
+Idents(new_Seu_AIBS_obj) <- "subclass_label"
+Idents(Seu_mathys_obj)
+
+new_Seu_AIBS_obj <- FindVariableFeatures(new_Seu_AIBS_obj, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+Seu_mathys_obj <- FindVariableFeatures(Seu_mathys_obj, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+
+tanchors <- FindTransferAnchors(reference = new_Seu_AIBS_obj, query = Seu_mathys_obj, dims = 1:30)
+predictions <- TransferData(anchorset = tanchors, refdata = new_Seu_AIBS_obj$subclass_label, dims = 1:30)
+Seu_mathys_obj <- AddMetaData(Seu_mathys_obj, metadata = predictions)
+
+test <- data.frame(unclass(table(Seu_mathys_obj$predicted.id, Seu_mathys_obj$matched_group)))
+
+Idents(Seu_mathys_obj) <- "predicted.id"
+
+mathys_markers_mega_mast_anchor <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 0, min.pct = 0, only.pos = TRUE, return.thresh = 1, test.use = "MAST")
+
+predicted_id_match <- data.frame(unclass(table(Seu_mathys_obj$predicted.id, Seu_mathys_obj$matched_group)))
+
+# checks and plots
+
+mathys_markers_mega_mast_anchor$markercheck <- paste0(mathys_markers_mega_mast_anchor$cluster, "_", mathys_markers_mega_mast_anchor$gene)
+test <- new_CgG_results
+test$markercheck <- paste0(test$subclass, "_", test$gene)
+length(intersect(mathys_markers_mega_mast_anchor$markercheck, test$markercheck))
+
+mathys_markers_mega_mast_anchor$volcano_group <- "Not significant"
+mathys_markers_mega_mast_anchor[mathys_markers_mega_mast_anchor$p_val < 0.05, "volcano_group"] <- "Independently significant"
+mathys_markers_mega_mast_anchor[mathys_markers_mega_mast_anchor$p_val_adj < 0.05, "volcano_group"] <- "Significant after correction"
+
+for (cellgroup in unique(new_CgG_results$subclass)){
+  temp_markers <- new_CgG_results[new_CgG_results$subclass == cellgroup, "gene"]
+  mathys_markers_mega_mast_anchor[((mathys_markers_mega_mast_anchor$cluster == cellgroup) &
+                                   (mathys_markers_mega_mast_anchor$gene %in% temp_markers))  
+                                    , "volcano_group"] <- "Hodge marker"
+} 
+
+table(mathys_markers_mega_mast_anchor$volcano_group)
+
+table(mathys_markers_mega_mast_anchor[mathys_markers_mega_mast_anchor$volcano_group == "Hodge marker", "cluster"])
+table(new_CgG_results[new_CgG_results$subclass %in% unique(mathys_markers_mega_mast_anchor$cluster),"subclass"])
+
+mathys_average <- AverageExpression(Seu_mathys_obj)
+mathys_average <- mathys_average$RNA
+
+intersect(test[(test$gene %in% row.names(mathys_average)) &
+               (test$subclass %in% unique(mathys_markers_mega_mast_anchor$cluster))
+               ,"markercheck"], mathys_markers_mega_mast_anchor$markercheck)
+
+setdiff(test[(test$gene %in% row.names(mathys_average)) &
+             (test$subclass %in% unique(mathys_markers_mega_mast_anchor$cluster)),"markercheck"], 
+             mathys_markers_mega_mast_anchor$markercheck)
+
+mathys_markers_mega_mast_anchor$p_val_adj_forplot <- log10(mathys_markers_mega_mast_anchor$p_val_adj)*(-1)
+mathys_markers_mega_mast_anchor[mathys_markers_mega_mast_anchor$p_val_adj_forplot == Inf, "p_val_adj_forplot"] <- 400
+
+library(ggplot2)
+
+ggplot(mathys_markers_mega_mast_anchor, aes(x=avg_logFC, y= p_val_adj_forplot, color=volcano_group)) + 
+  geom_point(size = .25) +
+  facet_wrap(~cluster, scales = "fixed")
+
+ggplot(mathys_markers_mega_mast_anchor[mathys_markers_mega_mast_anchor$volcano_group == "Hodge marker",], aes(x=avg_logFC, y= p_val_adj_forplot, color=volcano_group)) + 
+  geom_point(size = 1) +
+  facet_wrap(~cluster, scales = "fixed") +
+  theme(legend.position = "none")
