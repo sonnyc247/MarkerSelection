@@ -636,5 +636,15 @@ new_CgG_results_pairdata <- merge(new_CgG_results_pairdata, Result_df_pct, by = 
 
 new_CgG_results_pairdata <- new_CgG_results_pairdata[-1]
 
+### average expression
+
+hodge_average <- AverageExpression(new_Seu_AIBS_obj_for_test)
+hodge_average <- hodge_average$RNA
+hodge_average <- hodge_average[new_CgG_results$gene,]
+hodge_average <- tibble::rownames_to_column(hodge_average)
+colnames(hodge_average) <- paste0(colnames(hodge_average), "_mean_expression")
+colnames(hodge_average)[1] <- "gene"
+new_CgG_results_pairdata <- merge(new_CgG_results_pairdata, hodge_average, by = "gene")
+
 write.csv(new_CgG_results_pairdata, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_CgG_results_pairdata.csv", row.names = FALSE) #save/export results
 
