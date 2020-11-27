@@ -338,7 +338,7 @@ ggplot(mathys_markers_mega_mast[mathys_markers_mega_mast$volcano_group == "Hodge
   facet_wrap(~cluster, scales = "fixed") +
   theme(legend.position = "none")
 
-#### Seurat data integration ####
+#### Seurat data integration and comparison between Mathys and Hodge ####
 
 Idents(new_Seu_AIBS_obj) <- "subclass_label"
 Idents(Seu_mathys_obj)
@@ -357,6 +357,8 @@ Idents(Seu_mathys_obj) <- "predicted.id"
 mathys_markers_mega_mast_anchor <- FindAllMarkers(Seu_mathys_obj, slot = "data", logfc.threshold = 0, min.pct = 0, only.pos = TRUE, return.thresh = 1, test.use = "MAST")
 
 predicted_id_match <- data.frame(unclass(table(Seu_mathys_obj$predicted.id, Seu_mathys_obj$matched_group)))
+
+mathys_markers_selected_mast_anchor <- FindAllMarkers(Seu_mathys_obj, slot = "data", features=intersect(new_CgG_results$gene, row.names(mathys_average)), logfc.threshold = 0, min.pct = 0, return.thresh = 1, test.use = "MAST")
 
 # checks and plots
 
@@ -405,3 +407,234 @@ ggplot(mathys_markers_mega_mast_anchor[mathys_markers_mega_mast_anchor$volcano_g
   geom_point(size = 1) +
   facet_wrap(~cluster, scales = "fixed") +
   theme(legend.position = "none")
+
+Seu_mathys_obj$SST_or_Not <- Seu_mathys_obj$predicted.id
+Seu_mathys_obj@meta.data[Seu_mathys_obj$SST_or_Not != "SST","SST_or_Not"] <- "Not_SST" #collapsing the non-sst groups
+Idents(Seu_mathys_obj) <- "SST_or_Not"
+VlnPlot(Seu_mathys_obj, features = "SST", slot = "data")
+mathys_average_SST <- AverageExpression(Seu_mathys_obj)
+mathys_average_SST <- mathys_average_SST$RNA
+
+test <- t(mathys_average_SST["SST",])
+test <- tibble::rownames_to_column(as.data.frame(test))
+ggplot(data=test, aes(x=rowname, y=SST, fill=rowname)) + scale_fill_manual(values=c("white", "black")) +
+  geom_bar(stat="identity", color = "black") + theme_bw() +theme(axis.title.x=element_blank()) + theme(legend.position = "none")
+
+# gdp
+
+library(scrattch.vis)
+options(stringsAsFactors = F) # following https://github.com/AllenInstitute/scrattch.vis
+
+gdp_plot <- t(as.data.frame(Seu_mathys_obj[["RNA"]]@data)) #get transposed lnCPM matrix
+gdp_plot <- t(as.data.frame(new_Seu_AIBS_obj[["RNA"]]@data)) #get transposed lnCPM matrix
+
+# format count/expression matrix for group_dot_plot smooth running
+library(tibble)
+gdp_plot <- rownames_to_column(as.data.frame(gdp_plot)) #get sample names as a column
+colnames(gdp_plot)[1] <- "sample_name" #change column name of sample names (to match AIBS vignette on group_dot_plot)
+rownames(gdp_plot) <- gdp_plot$sample_name #reset df rownames as sample names as well, just in case
+
+# further adding and tweeking data in metadata dataframe to suite group_dot_plot
+gdp_anno <- as.data.frame(Seu_mathys_obj@meta.data) #create metadata copy for group_dot_plot
+gdp_anno <- as.data.frame(new_Seu_AIBS_obj@meta.data) #create metadata copy for group_dot_plot
+
+colnames(gdp_anno)[4] <- "sample_name"
+gdp_anno$subclass_label <- gdp_anno$predicted.id
+gdp_anno$subclass_id <- gdp_anno$subclass_label
+gdp_anno$subclass_color <- "white"
+gdp_anno[gdp_anno$subclass_label == "SST", "subclass_color"] <- "red"
+
+gdp_anno$it2_query_subclass_id <- gdp_anno$it2_query_subclass_label #prepare "_id" needed for plotting
+gdp_anno$it2_query_subclass_color <- gdp_anno$class_color #prepare "_color" needed for plotting; copy "class_color" for now
+gdp_anno$it2_query_subclass_label <- factor(gdp_anno$it2_query_subclass_label, levels = c("Inh_SST", "Inh_VIP", "Inh_PVALB", "Inh_LAMP5", "Inh_PAX6", "Pyramidal", "Astro_FGFR3", "Oligo",  "OPC_MYT1", "Micro_C1QC", "Peri_MUSTN1", "Endo_CLDN5", "VLMC_CYP1B1")) #setting factor order
+
+# set which genes to plot
+
+gdp_markers <- new_CgG_results[new_CgG_results$subclass == "SST", "gene"] #get SST markers 
+gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabetically
+
+gdp_markers <- new_CgG_results[new_CgG_results$subclass == "SST", "gene"] #get SST markers
+gdp_markers <- intersect(gdp_markers, row.names(mathys_average))
+gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabetically
+
+gdp_markers <- ACC_results[ACC_results$adapted_cluster_name == "PVALB", "gene"] #get PVALB markers 
+gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabetically
+
+# do the plot
+
+group_dot_plot(gdp_plot, 
+               gdp_anno, 
+               genes = gdp_markers, 
+               grouping = "subclass", 
+               log_scale = TRUE,
+               font_size = 10,
+               max_size = 20,
+               rotate_counts = TRUE)
+
+#volcano
+
+mathys_markers_selected_mast_anchor$volcano_group <- "Not significant"
+mathys_markers_selected_mast_anchor[mathys_markers_selected_mast_anchor$p_val < 0.05, "volcano_group"] <- "Significant"
+
+for (cellgroup in unique(new_CgG_results$subclass)){
+  temp_markers <- new_CgG_results[new_CgG_results$subclass == cellgroup, "gene"]
+  mathys_markers_selected_mast_anchor[((mathys_markers_selected_mast_anchor$cluster == cellgroup) &
+                                       (mathys_markers_selected_mast_anchor$gene %in% temp_markers))  
+                                       , "volcano_group"] <- "Hodge marker"
+} 
+
+table(mathys_markers_selected_mast_anchor$volcano_group)
+
+mathys_markers_selected_mast_anchor$p_val_forplot <- log10(mathys_markers_selected_mast_anchor$p_val)*(-1)
+mathys_markers_selected_mast_anchor[mathys_markers_selected_mast_anchor$p_val_forplot == Inf, "p_val_forplot"] <- 400
+
+groups_of_interest <- c("SST", "VIP", "Oligodendrocyte", "Microglia")
+groups_of_interest <- c("VLMC", "Pericyte", "Endothelial", "Microglia")
+
+ggplot(mathys_markers_selected_mast_anchor[mathys_markers_selected_mast_anchor$cluster %in% groups_of_interest,], aes(x=avg_logFC, y= p_val_forplot, color=volcano_group)) + 
+  geom_point(size = .75) +
+  facet_wrap(~cluster, scales = "fixed") +
+  scale_color_manual(values=c("red", "black", "orange")) +
+  theme_bw() 
+
+ggplot(mathys_markers_selected_mast_anchor[mathys_markers_selected_mast_anchor$cluster %in% groups_of_interest
+                                           & mathys_markers_selected_mast_anchor$volcano_group == "Hodge marker",], aes(x=avg_logFC, y= p_val_forplot, color=volcano_group)) + 
+  geom_point(size = .75) +
+  facet_wrap(~cluster, scales = "fixed") +
+  scale_color_manual(values=c("red", "black", "orange")) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+### log fc plot
+
+mathys_markers_selected_mast_anchor$clust_gene <- paste0(mathys_markers_selected_mast_anchor$cluster,"_",mathys_markers_selected_mast_anchor$gene)
+test2 <- new_CgG_results
+test2$clust_gene <- paste0(test2$subclass,"_",test2$gene)
+test <- merge(test2, mathys_markers_selected_mast_anchor, by = "clust_gene")
+
+names(test)[c(8,14)] <- c("Hodge_logFC", "Mathys_logFC")
+
+ggplot(test[test$cluster %in% groups_of_interest,], aes(x=Mathys_logFC, y= Hodge_logFC)) + 
+  geom_point(size = .75) +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~cluster, scales = "fixed") +
+  theme_bw() 
+
+test3 <- mathys_markers_selected_mast_anchor[mathys_markers_selected_mast_anchor$cluster == "SST",]
+
+library(metap)
+
+for (cellgroup in unique(test$subclass)){
+  print(cellgroup)
+  print(sumlog(test[test$subclass == cellgroup,"p_val"]))
+}
+
+source('https://raw.githubusercontent.com/yaowuliu/ACAT/master/R/ACAT.R')
+
+for (cellgroup in unique(test$subclass)){
+  print(cellgroup)
+  print(ACAT(test[test$subclass == cellgroup,"p_val"]))
+}
+
+#### get markers by pairwise comparisons ####
+
+### filter data
+Idents(new_Seu_AIBS_obj) <- "NeuN_Region" #we identify samples by "NeuN_Region", which we made befire in 1_Loading_and_selecting_data.Rmd to make it easy for us to remove neurons from MTG/CgG later
+
+new_Seu_AIBS_obj_for_test <- subset(new_Seu_AIBS_obj, idents = "MTG_Neuronal", invert = TRUE) #remove "MTG_Neuronal" cells
+
+table(new_Seu_AIBS_obj_for_test$NeuN_Region) #double check what classes we have
+
+Idents(new_Seu_AIBS_obj_for_test) <- "subclass_label" #assign "class_label" as the key grouping variable now
+
+table(Idents(new_Seu_AIBS_obj_for_test)) #double check what classes we have
+
+new_Seu_AIBS_obj_for_test <- subset(new_Seu_AIBS_obj_for_test, idents = "L4 IT", invert = TRUE) #remove "L4 IT" cell since there is an N of 1
+
+### screen data
+
+library("MAST") #as needed
+
+### find markers
+
+#make template
+pairwise_results <- FindMarkers(new_Seu_AIBS_obj_for_test, 
+                                slot = "data", 
+                                ident.1 = "SST", 
+                                ident.2 = "IT",
+                                features = c("SST","CBLN2"),
+                                test.use = "MAST")
+
+pairwise_results$target_group <- "test"
+pairwise_results$reference_group <- "test"
+pairwise_results <- tibble::rownames_to_column(pairwise_results)
+
+
+for (cellgroup in unique(Idents(new_Seu_AIBS_obj_for_test))){
+  
+  comparator_list <- as.character(unique(Idents(new_Seu_AIBS_obj_for_test)))
+  comparator_list <- comparator_list[comparator_list!=cellgroup] 
+  
+  for (referencegroup in comparator_list) {
+    
+    holder <- FindMarkers(new_Seu_AIBS_obj_for_test, slot = "data", 
+                        ident.1 = cellgroup, 
+                        ident.2 = referencegroup,
+                        features = new_CgG_results$gene,
+                        logfc.threshold = 0, 
+                        min.pct = 0, 
+                        test.use = "MAST")
+    holder$target_group <- cellgroup
+    holder$reference_group <- referencegroup
+    holder <- tibble::rownames_to_column(holder)
+    pairwise_results <- rbind(pairwise_results, holder)
+    
+  }
+  
+}
+
+### extract 2nd highest expressing group from df
+
+pairwise_results <- pairwise_results[-(1:2),]
+names(pairwise_results)[1] <- "gene"
+pairwise_results$subclass_gene <- paste0(pairwise_results$target_group, "_", pairwise_results$gene)
+new_CgG_results$subclass_gene <- paste0(new_CgG_results$subclass, "_", new_CgG_results$gene)
+selected_pairwise_results <- pairwise_results[pairwise_results$subclass_gene %in% unique(new_CgG_results$subclass_gene),]
+
+Result_df <- selected_pairwise_results[1,]
+Result_df[,"subclass_gene"] <- "test"
+Result_df_pct <- selected_pairwise_results[1,]
+Result_df_pct[,"subclass_gene"] <- "test"
+
+for (cellgroup in unique(selected_pairwise_results$target_group)){
+  
+  subclass_holder <- selected_pairwise_results[selected_pairwise_results$target_group == cellgroup,]
+  
+  for (gene_of_interest in unique(subclass_holder$gene)) {
+    gene_holder <- selected_pairwise_results[selected_pairwise_results$gene == gene_of_interest,]
+    holder <- gene_holder[which.min(gene_holder$avg_logFC),]
+    Result_df <- rbind(Result_df, holder)
+    holder <- gene_holder[which.max(gene_holder$pct.2),]
+    Result_df_pct <- rbind(Result_df_pct, holder)
+    
+  }
+  
+}
+
+### finalize + export results
+
+Result_df <- Result_df[-1,]
+Result_df <- Result_df[c(9,8,3,5,2)]
+Result_df_pct <- Result_df_pct[-1,]
+Result_df_pct <- Result_df_pct[c(9,8,3,5,2)]
+
+colnames(Result_df)[2:5] <- paste0("2ByFC_",colnames(Result_df)[2:5])
+colnames(Result_df_pct)[2:5] <- paste0("2ByPct_",colnames(Result_df_pct)[2:5])
+
+new_CgG_results_pairdata <- merge(new_CgG_results, Result_df, by = "subclass_gene")
+new_CgG_results_pairdata <- merge(new_CgG_results_pairdata, Result_df_pct, by = "subclass_gene")
+
+new_CgG_results_pairdata <- new_CgG_results_pairdata[-1]
+
+write.csv(new_CgG_results_pairdata, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_CgG_results_pairdata.csv", row.names = FALSE) #save/export results
+
