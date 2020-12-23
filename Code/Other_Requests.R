@@ -471,6 +471,10 @@ group_dot_plot(gdp_plot,
                max_size = 20,
                rotate_counts = TRUE)
 
+### systemic gdp ###
+
+
+
 #volcano
 
 mathys_markers_selected_mast_anchor$volcano_group <- "Not significant"
@@ -635,6 +639,100 @@ new_CgG_results_pairdata <- merge(new_CgG_results, Result_df, by = "subclass_gen
 new_CgG_results_pairdata <- merge(new_CgG_results_pairdata, Result_df_pct, by = "subclass_gene")
 
 new_CgG_results_pairdata <- new_CgG_results_pairdata[-1]
+
+
+
+#### QC based on sex-specific genes ####
+
+hodge_cpm <- new_Seu_AIBS_obj_for_test@assays$RNA@data[c("XIST", "KDM5D", "RPS4Y1"),]
+hodge_cpm <- as.matrix(hodge_cpm)
+hodge_cpm <- t(hodge_cpm)
+hodge_cpm <- as.data.frame(hodge_cpm)
+hodge_cpm <- tibble::rownames_to_column(hodge_cpm)
+
+hodge_meta <- new_Seu_AIBS_obj_for_test@meta.data
+hodge_meta <- tibble::rownames_to_column(hodge_meta)
+
+hodge_qcbysex <- merge(hodge_cpm, hodge_meta, by = "rowname")
+
+hodge_qcbysex <- tidyr::gather(hodge_qcbysex, "Gene", "Expression_Cpm", c(2:4))
+
+ggplot(hodge_qcbysex, aes(x = donor_sex_label, y = Expression_Cpm, color = donor_sex_label)) + 
+  geom_jitter(size = 0.5) +
+  facet_wrap(~Gene, scales = "free") +
+  scale_color_manual(values=c("red", "blue")) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+for (gene in unique(hodge_qcbysex$Gene)) {
+  
+  for (sex in unique(hodge_qcbysex$donor_sex_label)){
+  
+    quant_holder <- quantile(hodge_qcbysex[((hodge_qcbysex$donor_sex_label == sex) &
+                                            (hodge_qcbysex$Gene == gene)), "Expression_Cpm"], 
+                             probs = c(0.9, 0.95))
+    print(c(gene, sex, quant_holder))
+    
+  }
+  
+}
+
+ggplot(hodge_qcbysex, aes(x = donor_sex_label, y = Expression_Cpm, color = donor_sex_label)) + 
+  geom_jitter(size = 0.5) +
+  facet_wrap(~Gene, scales = "free") +
+  scale_color_manual(values=c("red", "blue")) +
+  theme_bw() 
+
+#### systemic hodge gdp ####
+
+library(scrattch.vis)
+options(stringsAsFactors = F) # following https://github.com/AllenInstitute/scrattch.vis
+
+gdp_plot <- t(as.data.frame(new_Seu_AIBS_obj[["RNA"]]@data)) #get transposed lnCPM matrix
+
+# format count/expression matrix for group_dot_plot smooth running
+library(tibble)
+gdp_plot <- rownames_to_column(as.data.frame(gdp_plot)) #get sample names as a column
+colnames(gdp_plot)[1] <- "sample_name" #change column name of sample names (to match AIBS vignette on group_dot_plot)
+rownames(gdp_plot) <- gdp_plot$sample_name #reset df rownames as sample names as well, just in case
+
+# further adding and tweeking data in metadata dataframe to suite group_dot_plot
+gdp_anno <- as.data.frame(new_Seu_AIBS_obj@meta.data) #create metadata copy for group_dot_plot
+
+#colnames(gdp_anno)[4] <- "sample_name"
+gdp_anno$subclass_id <- gdp_anno$subclass_label
+gdp_anno$subclass_color <- "white"
+
+# set which genes to plot
+
+for (cellgroup in names(humanMarkersCommon)[-5]) {
+  gdp_anno[gdp_anno$subclass_label == cellgroup, "subclass_color"] <- "red"
+  temp_markers <- unlist(humanMarkersCommon[cellgroup])
+  gdp_markers <- new_CgG_results_pairdata[new_CgG_results_pairdata$gene %in% temp_markers, c("gene", "roc_power")] #get group markers 
+  gdp_markers <- gdp_markers[order(gdp_markers$roc_power, decreasing = T),]
+  
+  group_dot_plot(gdp_plot, 
+                 gdp_anno, 
+                 genes = gdp_markers$gene, 
+                 grouping = "subclass", 
+                 log_scale = TRUE,
+                 font_size = 10,
+                 max_size = 20,
+                 rotate_counts = TRUE)
+  
+  if (cellgroup == "L5/6 NP"){
+  ggsave(filename = "L5_6_NP_gdp.pdf", path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/GDPs", height = (7 + (nrow(gdp_markers))/3), limitsize =  F)
+  } else if (cellgroup == "L5/6 IT Car3"){
+    ggsave(filename = "L5_6_IT_Car3_gdp.pdf", path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/GDPs", height = (7 + (nrow(gdp_markers))/3), limitsize =  F)  
+  } else{
+  ggsave(filename = paste0(cellgroup,"_gdp.pdf"), path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/GDPs", height = (7 + (nrow(gdp_markers))/3), limitsize =  F)  
+  }
+  
+  gdp_anno[gdp_anno$subclass_label == cellgroup, "subclass_color"] <- "white"
+
+  }
+
+#### Other Misc ####
 
 ### average expression
 
