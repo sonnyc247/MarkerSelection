@@ -746,3 +746,26 @@ new_CgG_results_pairdata <- merge(new_CgG_results_pairdata, hodge_average, by = 
 
 write.csv(new_CgG_results_pairdata, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_CgG_results_pairdata.csv", row.names = FALSE) #save/export results
 
+### Jordan marker filtering
+
+Jordan_CTX <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Inputs/SUPPL_S1.csv", stringsAsFactors=FALSE)
+Jordan_CTX_filtered <- Jordan_CTX[Jordan_CTX$avg_logFC > 1,]
+length(unique(Jordan_CTX_filtered$gene))
+duplicated_genes <- unique(Jordan_CTX_filtered[duplicated(Jordan_CTX_filtered$gene), "gene"])
+Jordan_CTX_filtered <- Jordan_CTX_filtered[!(Jordan_CTX_filtered$gene %in% duplicated_genes),]
+
+write.csv(Jordan_CTX_filtered, "Jordan_Mouse_Markers_Filtered.csv")
+
+### Annotating cell types and colours
+
+Celltypes_and_colours <- new_Seu_AIBS_obj@meta.data
+Celltypes_and_colours <- Celltypes_and_colours[,c("subclass_label", "subclass_color", "class_label", "class_color")]
+Celltypes_and_colours <- unique(Celltypes_and_colours)
+row.names(Celltypes_and_colours) <- NULL
+Celltypes_and_colours$Our_label <- Celltypes_and_colours$subclass_label
+Celltypes_and_colours[Celltypes_and_colours$class_label == "GABAergic","Our_label"] <- paste0("Inh_", Celltypes_and_colours[Celltypes_and_colours$class_label == "GABAergic","Our_label"])
+Celltypes_and_colours[Celltypes_and_colours$class_label == "Glutamatergic","Our_label"] <- paste0("Exc_", Celltypes_and_colours[Celltypes_and_colours$class_label == "Glutamatergic","Our_label"])
+Celltypes_and_colours <- Celltypes_and_colours[,c(5,1:4)]
+names(Celltypes_and_colours)[2:5] <- paste0("AIBS_", names(Celltypes_and_colours)[2:5])
+
+write.csv(Celltypes_and_colours, "Name_and_colour_scheme.csv")
