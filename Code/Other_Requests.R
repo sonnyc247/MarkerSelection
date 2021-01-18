@@ -769,3 +769,48 @@ Celltypes_and_colours <- Celltypes_and_colours[,c(5,1:4)]
 names(Celltypes_and_colours)[2:5] <- paste0("AIBS_", names(Celltypes_and_colours)[2:5])
 
 write.csv(Celltypes_and_colours, "Name_and_colour_scheme.csv")
+
+#### Pseudobulk quick attempt ####
+
+### Add some metadata
+test <- Seu_mathys_obj@meta.data
+
+row.names(mathys_meta_df) <- mathys_meta_df$TAG
+mathys_meta_df <- mathys_meta_df[,34:37]
+
+Seu_mathys_obj <- AddMetaData(Seu_mathys_obj, mathys_meta_df)
+
+### Pseudobulk analysis
+
+celltype_of_interest <- "SST"
+temp_mathys_obj <- subset(Seu_mathys_obj, idents = "SST")
+Idents(temp_mathys_obj) <- "projid"
+mathys_subject_count_mtx_holder <- AverageExpression(temp_mathys_obj)
+mathys_subject_count_mtx_holder <- mathys_subject_count_mtx_holder$RNA
+
+mathys_temp_metadata <- temp_mathys_obj@meta.data
+mathys_temp_count_mtx <- temp_mathys_obj@assays$RNA@counts
+mathys_temp_count_mtx <- as.matrix(mathys_temp_count_mtx)
+
+for (subjectID in unique(mathys_temp_metadata$projid)) {
+  cell_list <- as.character(mathys_temp_metadata[mathys_temp_metadata$projid == subjectID, "TAG"])
+  count_matrix_forsum <- mathys_temp_count_mtx[,cell_list]
+  gene_sums <- rowSums(count_matrix_forsum)
+  mathys_subject_count_mtx_holder[,as.character(subjectID)] <- gene_sums
+}
+
+mathys_temp_metadata <- merge(mathys_temp_metadata , ros_meta_small, by = 'projid')
+mathys_temp_subject_metadata <- mathys_temp_metadata[,c(1,34:37)]
+mathys_temp_subject_metadata <- unique(mathys_temp_subject_metadata)
+row.names(mathys_temp_subject_metadata) <- mathys_temp_subject_metadata$projid
+
+temp_mathys_subject_obj <- CreateSeuratObject(counts = mathys_subject_count_mtx_holder, meta.data = mathys_temp_subject_metadata)
+Idents(temp_mathys_subject_obj) <- "pathoAD"
+
+library(DESeq2)
+#Temp_DE_Results <- FindAllMarkers(temp_mathys_subject_obj, test.use = "DESeq2")
+#names(Temp_DE_Results)[6] <- "pathoAD"
+
+Temp_DE_Results <- FindMarkers(temp_mathys_subject_obj, ident.1 = "1", test.use = "DESeq2")
+
+write.csv(Temp_DE_Results, "Pseudobulk_SST_InitialRun1_ADvsControl.csv")
