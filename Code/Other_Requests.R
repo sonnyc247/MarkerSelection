@@ -812,5 +812,36 @@ library(DESeq2)
 #names(Temp_DE_Results)[6] <- "pathoAD"
 
 Temp_DE_Results <- FindMarkers(temp_mathys_subject_obj, ident.1 = "1", test.use = "DESeq2")
+Test <- AverageExpression(temp_mathys_subject_obj)
+Test <- Test$RNA
 
 write.csv(Temp_DE_Results, "Pseudobulk_SST_InitialRun1_ADvsControl.csv")
+
+
+### direct use of deseq2
+
+mathys_temp_subject_metadata$ncell <- 0
+
+# get number of cells per subject
+
+for (subjectID in unique(mathys_temp_metadata$projid)) {
+  cell_list <- as.character(mathys_temp_metadata[mathys_temp_metadata$projid == subjectID, "TAG"])
+  mathys_temp_subject_metadata[as.character(subjectID),"ncell"] <- length(cell_list)
+}
+
+# do deseq2
+
+library(DESeq2)
+library(tidyverse)
+
+mathys_temp_subject_metadata <- mathys_temp_subject_metadata %>% mutate(pathoAD = factor(pathoAD), msex = factor(msex))
+
+dds <- DESeqDataSetFromMatrix(countData = mathys_subject_count_mtx_holder, 
+                              colData= mathys_temp_subject_metadata, 
+                              design = ~pathoAD + age_death + msex + ncell)
+
+dds <- DESeq(dds)
+resultsNames(dds)
+Temp_DE_Results_noSeurat <- results(dds, name="pathoAD_1_vs_0")
+Temp_DE_Results_noSeurat <- as.data.frame(Temp_DE_Results_noSeurat)
+write.csv(Temp_DE_Results_noSeurat, "Pseudobulk_SST_InitialRun2_ADvsControl_DESEQ2withDesign.csv")
