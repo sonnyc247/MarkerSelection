@@ -18,7 +18,7 @@ new_metadata_filtered[1:10,1:5] #this is formated correctly (in terms of rows an
 row.names(new_metadata_filtered) <- new_metadata_filtered$sample_name #setting row names to sample names
 new_metadata_filtered[1:10,1:5] #checking the metadata df again
 
-new_Seu_AIBS_obj <- CreateSeuratObject(counts = t(new_count_matrix), meta.data = new_metadata_filtered) #this creates the Seurat object from our data
+Seu_AIBS_obj <- CreateSeuratObject(counts = t(new_count_matrix), meta.data = new_metadata_filtered) #this creates the Seurat object from our data
 
 ```
 
@@ -26,7 +26,7 @@ For those who are new to Seurat, we can do the following to check that we have c
 
 ```{r, checking Seurat object}
 ### comfirming count matrix
-test <- as.data.frame(new_Seu_AIBS_obj@assays$RNA@counts) #extracting count matrix from Seurat object
+test <- as.data.frame(Seu_AIBS_obj@assays$RNA@counts) #extracting count matrix from Seurat object
 
 #the follow need to be done to change the format of "test", not any data within it; this will allow us to use "identical" to compare "test" and the original count data in new_count_matrix
 test <- t(test) #transpose
@@ -41,7 +41,7 @@ identical(test, new_count_matrix) #indentical check; will be TRUE
 remove(temp_rownames) #remove temporary object
 
 ### confirming metadata
-test <- as.data.frame(new_Seu_AIBS_obj@meta.data) #extracting metadata from Seurat object
+test <- as.data.frame(Seu_AIBS_obj@meta.data) #extracting metadata from Seurat object
 test <- test[,4:ncol(test)] #removing extra columns made by Seurat
 identical(test, new_metadata_filtered) #identical test, should be TRUE
 
@@ -53,9 +53,11 @@ We next normalize our data.
 
 ```{r, normalize data}
 
-new_Seu_AIBS_obj <- NormalizeData(new_Seu_AIBS_obj, normalization.method = "LogNormalize", scale.factor = 1000000)
+Seu_AIBS_obj <- NormalizeData(Seu_AIBS_obj, normalization.method = "LogNormalize", scale.factor = 1000000)
 
-new_Seu_AIBS_obj[["RNA"]]@data[1:10,1:10] #preview/see our normalized data
+Seu_AIBS_obj[["RNA"]]@data[1:10,1:7] #preview/see our normalized data
+Seu_AIBS_obj[["RNA"]]@counts[1:10,1:7] #as opposed to our previous counts
+
 
 ```
 
@@ -63,14 +65,14 @@ For our purposes, we may next want to further remove some groups, such as neuron
 
 ```{r, subset data}
 
-Idents(new_Seu_AIBS_obj) <- "NeuN_Region" #we identify samples by "NeuN_Region", which we made befire in 1_Loading_and_selecting_data.Rmd to make it easy for us to remove neurons from MTG/CgG later
+#Idents(new_Seu_AIBS_obj) <- "NeuN_Region" #we identify samples by "NeuN_Region", which we made befire in 1_Loading_and_selecting_data.Rmd to make it easy for us to remove neurons from MTG/CgG later
 
-new_Seu_AIBS_obj_for_test <- subset(new_Seu_AIBS_obj, idents = "MTG_Neuronal", invert = TRUE) #remove "MTG_Neuronal" cells
+#new_Seu_AIBS_obj_for_test <- subset(new_Seu_AIBS_obj, idents = "MTG_Neuronal", invert = TRUE) #remove "MTG_Neuronal" cells
 
-table(new_Seu_AIBS_obj_for_test$subclass_label) #check what subclasses we have
+#table(new_Seu_AIBS_obj_for_test$subclass_label) #check what subclasses we have
 
-Idents(new_Seu_AIBS_obj_for_test) <- "subclass_label" #assign "subclass_label" as the key grouping variable now
-new_Seu_AIBS_obj_for_test <- subset(new_Seu_AIBS_obj_for_test, idents = "L4 IT", invert = TRUE) #remove "L4 IT" cell since there is an N of 1
+#Idents(new_Seu_AIBS_obj_for_test) <- "subclass_label" #assign "subclass_label" as the key grouping variable now
+#new_Seu_AIBS_obj_for_test <- subset(new_Seu_AIBS_obj_for_test, idents = "L4 IT", invert = TRUE) #remove "L4 IT" cell since there is an N of 1
 
 ```
 
@@ -78,7 +80,9 @@ We are almost ready to find cell markers. If we had a small dataset, or cared on
 
 ```{r, simple/direct marker/DE gene selection}
 
-Idents(new_Seu_AIBS_obj_for_test) <- "subclass_label" #apply/assign/confirm our identity labels of interest to cells, if not already done so
+Idents(Seu_AIBS_obj) <- "subclass_label" #apply/assign/confirm our identity labels of interest to cells, if not already done so
+
+head(Idents(Seu_AIBS_obj))
 
 # do all comparisons, using defaults (Wilcoxon rank-sum test)
 new_AIBS_markers <- FindAllMarkers(object = new_Seu_AIBS_obj) # if computational resources/time is not an issue, we can run this using all default settings; this is not run for the generation of this notbook
@@ -100,7 +104,7 @@ Idents(new_Seu_AIBS_obj_for_test) <- "subclass_label" #apply/assign/confirm our 
 BiocManager::install("MAST") #if/as needed
 library("MAST")
 
-new_AIBS_markers_screen_CgG <- FindAllMarkers(new_Seu_AIBS_obj_for_test, slot = "data", logfc.threshold = .1, min.pct = .1, only.pos = TRUE, return.thresh = .05, test.use = "MAST") # we use this as a dummy run; we don't care about these results per se, but rather the fold-changes and detected percentages of key markers in their cannonical groups (e.g: SST in SST cluster) 
+new_AIBS_markers_screen_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = .5, min.pct = .2, only.pos = F, return.thresh = .1, test.use = "MAST") # we use this as a dummy run; we don't care about these results per se, but rather the fold-changes and detected percentages of key markers in their cannonical groups (e.g: SST in SST cluster) 
 
 new_AIBS_markers_screen_CgG[new_AIBS_markers_screen_CgG$cluster == new_AIBS_markers_screen_CgG$gene,] #see namesake gene's fc and pct
 
@@ -123,14 +127,16 @@ Thus, we can see that high expression of PAX6 in Astrocytes may be contributing 
 
 ```{r, find markers for CgG}
 
-Idents(new_Seu_AIBS_obj_for_test) <- "subclass_label" #apply/assign/confirm our identity labels of interest to cells, if not already done so
+Idents(Seu_AIBS_obj) <- "subclass_label" #apply/assign/confirm our identity labels of interest to cells, if not already done so
+head(Idents(Seu_AIBS_obj))
+
 library("MAST") #check that mast is loaded
 
-new_AIBS_markers_mast_CgG <- FindAllMarkers(new_Seu_AIBS_obj_for_test, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_mast_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
 
-new_AIBS_markers_roc_CgG <- FindAllMarkers(new_Seu_AIBS_obj_for_test, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+new_AIBS_markers_roc_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
 
-head(new_AIBS_markers_mast_CgG) #preview our results
+head(new_AIBS_markers_mast_ALL) #preview our results
 
 ```
 
@@ -139,17 +145,17 @@ The results (when using FindAllMarkers) are in one dataframe in a "gathered" for
 ```{r, remove duplicate/non-specific markers}
 
 ### for mast
-length(unique(new_AIBS_markers_mast_CgG$gene)) #check for unique marker genes
-dup_list <- unique(new_AIBS_markers_mast_CgG[duplicated(new_AIBS_markers_mast_CgG$gene),"gene"]) #list of duplicated genes
-new_AIBS_markers_mast_CgG <- new_AIBS_markers_mast_CgG[!(new_AIBS_markers_mast_CgG$gene %in% dup_list),] #remove duplicated marker genes
+length(unique(new_AIBS_markers_mast_ALL$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_ALL[duplicated(new_AIBS_markers_mast_ALL$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_ALL <- new_AIBS_markers_mast_ALL[!(new_AIBS_markers_mast_ALL$gene %in% dup_list),] #remove duplicated marker genes
 
 ### for roc
-length(unique(new_AIBS_markers_roc_CgG$gene)) #check for unique marker genes
-dup_list <- unique(new_AIBS_markers_roc_CgG[duplicated(new_AIBS_markers_roc_CgG$gene),"gene"]) #list of duplicated genes
-new_AIBS_markers_roc_CgG <- new_AIBS_markers_roc_CgG[!(new_AIBS_markers_roc_CgG$gene %in% dup_list),] #remove duplicated marker genes
+length(unique(new_AIBS_markers_roc_ALL$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_ALL[duplicated(new_AIBS_markers_roc_ALL$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_ALL <- new_AIBS_markers_roc_ALL[!(new_AIBS_markers_roc_ALL$gene %in% dup_list),] #remove duplicated marker genes
 
-length(intersect(new_AIBS_markers_mast_CgG$gene, new_AIBS_markers_roc_CgG$gene)) #see intersect of marker genes
-table(new_AIBS_markers_roc_CgG$cluster) #see breakdown of markers by group
+length(intersect(new_AIBS_markers_mast_ALL$gene, new_AIBS_markers_roc_ALL$gene)) #see intersect of marker genes
+table(new_AIBS_markers_roc_ALL$cluster) #see breakdown of markers by group
 
 ```
 
@@ -157,12 +163,24 @@ Finally, we combine/merge the two, to one set of results, and add entrez/ensembl
 
 ```{r, finalize result df and save output}
 
-Result_df <- merge(new_AIBS_markers_roc_CgG[,c(7,6,4,5,2,1,3)], new_AIBS_markers_mast_CgG[,c(1,5,7)], by = "gene", all.x = TRUE, all.y = TRUE) #combine the marker df; may want to double check the indices/order
+new_AIBS_markers_mast_ALL$group_gene <- paste0(new_AIBS_markers_mast_ALL$cluster, "_", new_AIBS_markers_mast_ALL$gene)
+new_AIBS_markers_roc_ALL$group_gene <- paste0(new_AIBS_markers_roc_ALL$cluster, "_", new_AIBS_markers_roc_ALL$gene)
+
+Result_df <- merge(new_AIBS_markers_roc_ALL, new_AIBS_markers_mast_ALL, by = "group_gene", all.x = T, all.y = T) #combine the marker df
+
+Result_df <- Result_df %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df <- Result_df %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df <- Result_df %>% mutate(avg_logFC = coalesce(avg_logFC.x, avg_logFC.y))
+Result_df <- Result_df %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df <- Result_df %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+
+Result_df$ensembl_gene_id[is.na(Result_df$ensembl_gene_id)] <- "NA"
+Result_df$has_ensembl <- Result_df$ensembl_gene_id != "NA"
 
 ### to add entrez and ensembl IDs to the output/result df
 
 # our mgi-to-entrez ID conversion comes from a file from AIBS http://celltypes.brain-map.org/api/v2/well_known_file_download/694416044
-human_MTG_2018_06_14_genes_rows <- read_csv("~/git/MarkerSelection/Data/Inputs/human_MTG_2018-06-14_genes-rows.csv") #loading the conversion data for entrez IDs from AIBS
+human_MTG_2018_06_14_genes_rows <- readr::read_csv("~/git/MarkerSelection/Data/Inputs/human_MTG_2018-06-14_genes-rows.csv") #loading the conversion data for entrez IDs from AIBS
 
 library('biomaRt') #load biomart for getting ensembl ID
 ensembl <- useMart("ensembl", dataset="hsapiens_gene_ensembl") #load human gene dataset

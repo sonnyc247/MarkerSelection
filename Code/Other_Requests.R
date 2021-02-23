@@ -212,6 +212,44 @@ for (i in 1:length(unique(new_AIBS_markers_mast_MTG$cluster))) {
 
 write.csv(overlap_summary, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/mast_overlap_summary.csv") #save/export results
 
+#### get markers from all of hodge ####
+
+metadata <- new_Seu_AIBS_obj@meta.data
+Idents(new_Seu_AIBS_obj) <- "subclass_label"
+
+table(new_Seu_AIBS_obj$subclass_label) #double check what classes we have
+
+Idents(new_Seu_AIBS_obj) #check we have subclass as active identity
+
+### find markers
+
+new_AIBS_markers_mast_ALL <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+
+new_AIBS_markers_roc_ALL <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### remove duplicates
+
+dup_list <- unique(new_AIBS_markers_mast_MTG_NeuNonN[duplicated(new_AIBS_markers_mast_MTG_NeuNonN$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_MTG_NeuNonN <- new_AIBS_markers_mast_MTG_NeuNonN[!(new_AIBS_markers_mast_MTG_NeuNonN$gene %in% dup_list),] #remove duplicated marker genes
+
+dup_list <- unique(new_AIBS_markers_roc_MTG_NeuNonN[duplicated(new_AIBS_markers_roc_MTG_NeuNonN$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_MTG_NeuNonN <- new_AIBS_markers_roc_MTG_NeuNonN[!(new_AIBS_markers_roc_MTG_NeuNonN$gene %in% dup_list),] #remove duplicated marker genes
+
+remove(dup_list) #clean temporary object
+
+### finalize df
+
+length(intersect(new_AIBS_markers_mast_MTG_NeuNonN$gene, new_AIBS_markers_roc_MTG_NeuNonN$gene)) #see intersect of marker genes
+Result_df <- merge(new_AIBS_markers_roc_MTG_NeuNonN[,c(8,7,5,6,2,1,3)], new_AIBS_markers_mast_MTG_NeuNonN[,c(1,5,7,6,3,4,2)], by = "gene", all.x = TRUE, all.y = TRUE) #combine the marker df; may want to double check the indices/order
+unique_genes <- setdiff(new_AIBS_markers_mast_MTG_NeuNonN$gene, new_AIBS_markers_roc_MTG_NeuNonN$gene) #genes unique to mast_MTG
+Result_df <- Result_df[,1:9] #remove redundant columns
+
+Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+colnames(Result_df)[c(3:11)] <- c("ensembl_id", "class", "pct.1", "pct.2", "avg_logFC", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+new_MTG_results_NeuNonN <- Result_df #store the results in R
+write.csv(new_MTG_results_NeuNonN, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTG_results_NeuNonN.csv") #save/export results
+
 #### get celltype markers from Mathys ####
 
 # prep metadata
@@ -340,6 +378,9 @@ ggplot(mathys_markers_mega_mast[mathys_markers_mega_mast$volcano_group == "Hodge
 
 #### Seurat data integration and comparison between Mathys and Hodge ####
 
+new_Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/new_Seu_AIBS_obj.rds")
+Seu_mathys_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds")
+
 Idents(new_Seu_AIBS_obj) <- "subclass_label"
 Idents(Seu_mathys_obj)
 
@@ -439,7 +480,7 @@ gdp_anno <- as.data.frame(Seu_mathys_obj@meta.data) #create metadata copy for gr
 gdp_anno <- as.data.frame(new_Seu_AIBS_obj@meta.data) #create metadata copy for group_dot_plot
 
 colnames(gdp_anno)[4] <- "sample_name"
-gdp_anno$subclass_label <- gdp_anno$predicted.id
+#gdp_anno$subclass_label <- gdp_anno$predicted.id
 gdp_anno$subclass_id <- gdp_anno$subclass_label
 gdp_anno$subclass_color <- "white"
 gdp_anno[gdp_anno$subclass_label == "SST", "subclass_color"] <- "red"
@@ -462,14 +503,43 @@ gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabeti
 
 # do the plot
 
+gdp_anno_test <- merge(gdp_anno, Name_and_colour_scheme, by.x = "subclass_label", by.y = "AIBS_subclass_label", all.x = T, all.y = F)
+gdp_anno_test$old_labels <- gdp_anno_test$subclass_label
+gdp_anno_test$subclass_label <- gdp_anno_test$Our_label
+gdp_anno_test$subclass_label <- factor(gdp_anno_test$subclass_label, levels = c("Exc_IT",
+                                                                              "Exc_L5 ET",
+                                                                              "Exc_L5/6 IT Car3",
+                                                                              "Exc_L5/6 NP",
+                                                                              "Exc_L6 CT",  
+                                                                              "Exc_L6b",
+                                                                              "Inh_SST",
+                                                                              "Inh_LAMP5",
+                                                                              "Inh_PAX6",
+                                                                              "Inh_PVALB",
+                                                                              "Inh_VIP",
+                                                                              "Astrocyte",
+                                                                              "Endothelial",      
+                                                                              "Microglia",
+                                                                              "Oligodendrocyte",
+                                                                              "OPC",
+                                                                              "Pericyte",
+                                                                              "VLMC"))
+
 group_dot_plot(gdp_plot, 
-               gdp_anno, 
+               gdp_anno_test, 
                genes = gdp_markers, 
                grouping = "subclass", 
                log_scale = TRUE,
-               font_size = 10,
-               max_size = 20,
+               font_size = 14,
+               max_size = 29,
                rotate_counts = TRUE)
+
+ggsave(dpi = 300, 
+       limitsize = F,
+       filename = "Hodge_SST_gdp.jpg",
+       device = "jpeg")
+
+ggsave(filename = "L5_6_NP_gdp.pdf", path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/GDPs", height = (7 + (nrow(gdp_markers))/3), limitsize =  F)
 
 ### systemic gdp ###
 
@@ -783,7 +853,9 @@ Seu_mathys_obj <- AddMetaData(Seu_mathys_obj, mathys_meta_df)
 ### Pseudobulk analysis
 
 celltype_of_interest <- "SST"
-temp_mathys_obj <- subset(Seu_mathys_obj, idents = "SST")
+Idents(Seu_mathys_obj) <- "broad.cell.type"
+celltype_of_interest <- "Ex"
+temp_mathys_obj <- subset(Seu_mathys_obj, idents = celltype_of_interest)
 Idents(temp_mathys_obj) <- "projid"
 mathys_subject_count_mtx_holder <- AverageExpression(temp_mathys_obj)
 mathys_subject_count_mtx_holder <- mathys_subject_count_mtx_holder$RNA
@@ -799,10 +871,20 @@ for (subjectID in unique(mathys_temp_metadata$projid)) {
   mathys_subject_count_mtx_holder[,as.character(subjectID)] <- gene_sums
 }
 
+# read in rosmap metadata from dan's lab folder
+ros_meta = readRDS('/external/rprshnas01/netdata_kcni/dflab/data/rosmap/phenotype/ROSmaster.rds')
+# select just the columns from ros master that we need
+ros_meta_small = ros_meta %>% select(projid, pathoAD, gpath, age_death, msex)
+# two samples are missing diagnoses - these are AD cases according to the mathys paper 
+ros_meta_small[is.na(ros_meta_small$pathoAD), 'pathoAD'] = 1 # 1 is the label for AD in this dataset
+ros_meta_small = ros_meta_small %>% mutate(pathoAD = factor(pathoAD), msex = factor(msex))
+
 mathys_temp_metadata <- merge(mathys_temp_metadata , ros_meta_small, by = 'projid')
 mathys_temp_subject_metadata <- mathys_temp_metadata[,c(1,34:37)]
 mathys_temp_subject_metadata <- unique(mathys_temp_subject_metadata)
 row.names(mathys_temp_subject_metadata) <- mathys_temp_subject_metadata$projid
+
+### Seurat method
 
 temp_mathys_subject_obj <- CreateSeuratObject(counts = mathys_subject_count_mtx_holder, meta.data = mathys_temp_subject_metadata)
 Idents(temp_mathys_subject_obj) <- "pathoAD"
@@ -812,11 +894,10 @@ library(DESeq2)
 #names(Temp_DE_Results)[6] <- "pathoAD"
 
 Temp_DE_Results <- FindMarkers(temp_mathys_subject_obj, ident.1 = "1", test.use = "DESeq2")
-Test <- AverageExpression(temp_mathys_subject_obj)
+Test <- AverageExpression(temp_mathys_subject_obj, slot = "counts")
 Test <- Test$RNA
 
 write.csv(Temp_DE_Results, "Pseudobulk_SST_InitialRun1_ADvsControl.csv")
-
 
 ### direct use of deseq2
 
@@ -832,16 +913,205 @@ for (subjectID in unique(mathys_temp_metadata$projid)) {
 # do deseq2
 
 library(DESeq2)
-library(tidyverse)
+#library(tidyverse)
 
 mathys_temp_subject_metadata <- mathys_temp_subject_metadata %>% mutate(pathoAD = factor(pathoAD), msex = factor(msex))
+str(mathys_temp_subject_metadata)
 
 dds <- DESeqDataSetFromMatrix(countData = mathys_subject_count_mtx_holder, 
-                              colData= mathys_temp_subject_metadata, 
-                              design = ~pathoAD + age_death + msex + ncell)
+                              colData = mathys_temp_subject_metadata, 
+                              design = ~ pathoAD + age_death + msex + ncell)
+
+### first basic attempt
 
 dds <- DESeq(dds)
 resultsNames(dds)
 Temp_DE_Results_noSeurat <- results(dds, name="pathoAD_1_vs_0")
 Temp_DE_Results_noSeurat <- as.data.frame(Temp_DE_Results_noSeurat)
+
+### second attempts from digging into seurat
+
+dds <- DESeq2::estimateSizeFactors(object = dds)
+dds <- DESeq2::estimateDispersions(object = dds, fitType = "local")
+dds <- DESeq2::nbinomWaldTest(object = dds)
+resultsNames(dds)
+Temp_DE_Results_noSeurat <- DESeq2::results(object = dds,
+                                            contrast = c("pathoAD", "1", "0"),
+                                            alpha = 0.05)
+
+#testresults <- lfcShrink(dds, coef="pathoAD_1_vs_0", type="apeglm")
+#testresults <- results(dds, contrast=c("pathoAD","1","0"))
+
+for (ADCondition in unique(mathys_temp_metadata$projid)) {
+  cell_list <- as.character(mathys_temp_metadata[mathys_temp_metadata$projid == subjectID, "TAG"])
+  count_matrix_forsum <- mathys_temp_count_mtx[,cell_list]
+  gene_sums <- rowSums(count_matrix_forsum)
+  mathys_subject_count_mtx_holder[,as.character(subjectID)] <- gene_sums
+}
+
 write.csv(Temp_DE_Results_noSeurat, "Pseudobulk_SST_InitialRun2_ADvsControl_DESEQ2withDesign.csv")
+
+c("GOLT1B", "ATF6B", "DDRGK1", "TUBB2A", "BEX2", "ATPIF1", "RASGEF1B", "NGFRAP1", "LINGO1", "NTNG1")
+
+table(mathys_temp_subject_metadata$pathoAD, mathys_temp_subject_metadata$msex)
+t.test(mathys_temp_subject_metadata$age_death[mathys_temp_subject_metadata$pathoAD=="1"], 
+       mathys_temp_subject_metadata$age_death[mathys_temp_subject_metadata$pathoAD=="0"])
+t.test(mathys_temp_subject_metadata$ncell[mathys_temp_subject_metadata$pathoAD=="1"], 
+       mathys_temp_subject_metadata$ncell[mathys_temp_subject_metadata$pathoAD=="0"])
+
+#### temp ####
+saveRDS(Seu_mathys_obj, file = "Seu_mathys_obj.rds")
+
+#### collapse AIBS IT ####
+
+unique(Idents(Seu_AIBS_obj))
+Seu_AIBS_obj$subclass_label_collapsed <- Seu_AIBS_obj$subclass_label
+
+Seu_AIBS_obj$subclass_label_collapsed[Seu_AIBS_obj$subclass_label_collapsed=="L4 IT"] <- "IT" #collapse to IT
+Seu_AIBS_obj$subclass_label_collapsed[Seu_AIBS_obj$subclass_label_collapsed=="L5/6 IT Car3"] <- "IT" #collapse to IT
+
+Idents(Seu_AIBS_obj) <- "subclass_label_collapsed"
+unique(Idents(Seu_AIBS_obj))
+
+table(Idents(Seu_AIBS_obj))
+table(Seu_AIBS_obj$subclass_label)
+
+new_AIBS_markers_mast_ITcol <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_ITcol <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### for mast
+length(unique(new_AIBS_markers_mast_ITcol$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_ITcol[duplicated(new_AIBS_markers_mast_ITcol$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_ITcol <- new_AIBS_markers_mast_ITcol[!(new_AIBS_markers_mast_ITcol$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_ITcol$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_ITcol[duplicated(new_AIBS_markers_roc_ITcol$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_ITcol <- new_AIBS_markers_roc_ITcol[!(new_AIBS_markers_roc_ITcol$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_ITcol$gene, new_AIBS_markers_roc_ITcol$gene)) #see intersect of marker genes
+
+### combine
+new_AIBS_markers_mast_ITcol$group_gene <- paste0(new_AIBS_markers_mast_ITcol$cluster, "_", new_AIBS_markers_mast_ITcol$gene)
+new_AIBS_markers_roc_ITcol$group_gene <- paste0(new_AIBS_markers_roc_ITcol$cluster, "_", new_AIBS_markers_roc_ITcol$gene)
+
+Result_df_ITcol <- merge(new_AIBS_markers_roc_ITcol, new_AIBS_markers_mast_ITcol, by = "group_gene", all.x = T, all.y = T) #combine the marker df
+
+Result_df_ITcol <- Result_df_ITcol %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df_ITcol <- Result_df_ITcol %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df_ITcol <- Result_df_ITcol %>% mutate(avg_logFC = coalesce(avg_logFC.x, avg_logFC.y))
+Result_df_ITcol <- Result_df_ITcol %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df_ITcol <- Result_df_ITcol %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+
+### to add entrez and ensembl IDs to the output/result df
+
+Result_df_ITcol <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_ITcol, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+
+Result_df_ITcol$ensembl_gene_id[is.na(Result_df_ITcol$ensembl_gene_id)] <- "NA"
+Result_df_ITcol$has_ensembl <- Result_df_ITcol$ensembl_gene_id != "NA"
+
+#### CgG and MTG only ####
+
+unique(new_Seu_AIBS_obj$NeuN_Region)
+
+Idents(new_Seu_AIBS_obj) <- "subclass_label"
+unique(Idents(new_Seu_AIBS_obj))
+table(Idents(new_Seu_AIBS_obj))
+
+new_AIBS_markers_mast_MTGandCgG <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_MTGandCgG <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### for mast
+length(unique(new_AIBS_markers_mast_MTGandCgG$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_MTGandCgG[duplicated(new_AIBS_markers_mast_MTGandCgG$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_MTGandCgG <- new_AIBS_markers_mast_MTGandCgG[!(new_AIBS_markers_mast_MTGandCgG$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_MTGandCgG$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_MTGandCgG[duplicated(new_AIBS_markers_roc_MTGandCgG$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_MTGandCgG <- new_AIBS_markers_roc_MTGandCgG[!(new_AIBS_markers_roc_MTGandCgG$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_MTGandCgG$gene, new_AIBS_markers_roc_MTGandCgG$gene)) #see intersect of marker genes
+
+### combine
+new_AIBS_markers_mast_MTGandCgG$group_gene <- paste0(new_AIBS_markers_mast_MTGandCgG$cluster, "_", new_AIBS_markers_mast_MTGandCgG$gene)
+new_AIBS_markers_roc_MTGandCgG$group_gene <- paste0(new_AIBS_markers_roc_MTGandCgG$cluster, "_", new_AIBS_markers_roc_MTGandCgG$gene)
+
+Result_df_MTGandCgG <- merge(new_AIBS_markers_roc_MTGandCgG, new_AIBS_markers_mast_MTGandCgG, by = "group_gene", all.x = T, all.y = T) #combine the marker df
+
+Result_df_MTGandCgG <- Result_df_MTGandCgG %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df_MTGandCgG <- Result_df_MTGandCgG %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df_MTGandCgG <- Result_df_MTGandCgG %>% mutate(avg_logFC = coalesce(avg_logFC.x, avg_logFC.y))
+Result_df_MTGandCgG <- Result_df_MTGandCgG %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df_MTGandCgG <- Result_df_MTGandCgG %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+
+### to add entrez and ensembl IDs to the output/result df
+
+Result_df_MTGandCgG <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_MTGandCgG, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+
+Result_df_MTGandCgG$ensembl_gene_id[is.na(Result_df_MTGandCgG$ensembl_gene_id)] <- "NA"
+Result_df_MTGandCgG$has_ensembl <- Result_df_MTGandCgG$ensembl_gene_id != "NA"
+
+#### CgG and MTG only 2.0 lfct ####
+
+unique(new_Seu_AIBS_obj$NeuN_Region)
+
+Idents(new_Seu_AIBS_obj) <- "subclass_label"
+unique(Idents(new_Seu_AIBS_obj))
+table(Idents(new_Seu_AIBS_obj))
+
+new_AIBS_markers_mast_MTGandCgG_lfct2.0 <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.0, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_MTGandCgG_lfct2.0 <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.0, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+new_AIBS_markers_mast_MTGandCgG_lfct1.5 <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_MTGandCgG_lfct1.5 <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+
+### for mast
+length(unique(new_AIBS_markers_mast_MTGandCgG_lfct1.5$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_MTGandCgG_lfct1.5[duplicated(new_AIBS_markers_mast_MTGandCgG_lfct1.5$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_MTGandCgG_lfct1.5 <- new_AIBS_markers_mast_MTGandCgG_lfct1.5[!(new_AIBS_markers_mast_MTGandCgG_lfct1.5$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_MTGandCgG_lfct1.5$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_MTGandCgG_lfct1.5[duplicated(new_AIBS_markers_roc_MTGandCgG_lfct1.5$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_MTGandCgG_lfct1.5 <- new_AIBS_markers_roc_MTGandCgG_lfct1.5[!(new_AIBS_markers_roc_MTGandCgG_lfct1.5$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_MTGandCgG_lfct1.5$gene, new_AIBS_markers_roc_MTGandCgG_lfct1.5$gene)) #see intersect of marker genes
+
+### combine
+new_AIBS_markers_mast_MTGandCgG_lfct1.5$group_gene <- paste0(new_AIBS_markers_mast_MTGandCgG_lfct1.5$cluster, "_", new_AIBS_markers_mast_MTGandCgG_lfct1.5$gene)
+new_AIBS_markers_roc_MTGandCgG_lfct1.5$group_gene <- paste0(new_AIBS_markers_roc_MTGandCgG_lfct1.5$cluster, "_", new_AIBS_markers_roc_MTGandCgG_lfct1.5$gene)
+
+Result_df_MTGandCgG_lfct1.5 <- merge(new_AIBS_markers_roc_MTGandCgG_lfct1.5, new_AIBS_markers_mast_MTGandCgG_lfct1.5, by = "group_gene", all.x = T, all.y = T) #combine the marker df
+
+Result_df_MTGandCgG_lfct1.5 <- Result_df_MTGandCgG_lfct1.5 %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df_MTGandCgG_lfct1.5 <- Result_df_MTGandCgG_lfct1.5 %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df_MTGandCgG_lfct1.5 <- Result_df_MTGandCgG_lfct1.5 %>% mutate(avg_logFC = coalesce(avg_logFC.x, avg_logFC.y))
+Result_df_MTGandCgG_lfct1.5 <- Result_df_MTGandCgG_lfct1.5 %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df_MTGandCgG_lfct1.5 <- Result_df_MTGandCgG_lfct1.5 %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+
+### to add entrez and ensembl IDs to the output/result df
+
+Result_df_MTGandCgG_lfct1.5 <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_MTGandCgG_lfct1.5, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+
+Result_df_MTGandCgG_lfct1.5$ensembl_gene_id[is.na(Result_df_MTGandCgG_lfct1.5$ensembl_gene_id)] <- "NA"
+Result_df_MTGandCgG_lfct1.5$has_ensembl <- Result_df_MTGandCgG_lfct1.5$ensembl_gene_id != "NA"
+
+table(Result_df_MTGandCgG_lfct2.0[, c("cluster", "has_ensembl")])
+table(Result_df_MTGandCgG_lfct1.5[, c("cluster", "has_ensembl")])
+
+new_AIBS_markers_mast_MTGandCgG_screen <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 0.1, min.pct = 0.1, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+
+### compare
+
+new_comparator <- Result_df_MTGandCgG_lfct2.0
+new_comparator <- new_comparator[new_comparator$has_ensembl == T,]
+table(new_comparator$cluster)
+intersect(new_CgG_results$comparator, new_comparator$group_gene) %>% length()
+
+subclass_to_focus <- "PVALB"
+intersect(new_CgG_results[new_CgG_results$subclass == subclass_to_focus, "gene"], new_comparator[new_comparator$cluster == subclass_to_focus, "gene"])
+
+intersect(Result_df_MTGandCgG[Result_df_MTGandCgG$cluster == subclass_to_focus, "gene"], new_comparator[new_comparator$cluster == subclass_to_focus, "gene"])
+union(Result_df_MTGandCgG[Result_df_MTGandCgG$cluster == subclass_to_focus, "gene"], new_comparator[new_comparator$cluster == subclass_to_focus, "gene"])

@@ -10,7 +10,7 @@ First, we load and look at the metadata to see what we have available and make o
 
 ```{r, loading and reviewing meta-data, filtering data}
 
-new_metadata <- read.csv("/external/rprshnas01/netdata_kcni/stlab/AIBS_scRNAseq_2019/human/metadata.csv", stringsAsFactors=FALSE) #this file corresponds to https://idk-etl-prod-download-bucket.s3.amazonaws.com/aibs_human_ctx_smart-seq/metadata.csv , we are using FALSE for strings as factors so that we can edit and order them later
+new_metadata <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/metadata.csv", stringsAsFactors=FALSE) #this file corresponds to https://idk-etl-prod-download-bucket.s3.amazonaws.com/aibs_human_ctx_smart-seq/metadata.csv , we are using FALSE for strings as factors so that we can edit and order them later
 
 names(new_metadata) #see columns that we have to work with, "outlier_call" and "subclass_label" are of interest to us here
 
@@ -20,24 +20,15 @@ new_metadata_filtered <- new_metadata[new_metadata$outlier_call == "False",] #fi
 
 table(new_metadata_filtered$subclass_label, useNA = "ifany") #for this demo/workbook, we will be working with subclass labels; this is to let us see what data we have
 
-#subclass_exclusion_list <- c("IT", "L4 IT", "L5 ET", "L6b") #cell subclasses that we are excluding; in this case, we are excluding them because they are very general and vague and could steal/obscure markers from the other, more defined cell types (if needed/as desired)
-
-#new_metadata_filtered <- new_metadata_filtered[!(new_metadata_filtered$subclass_label %in% subclass_exclusion_list),] #filter data based on subclass exclusion (if needed/as desired)
-
-table(new_metadata_filtered[,c("subclass_label", "region_label")], useNA = "ifany") #we can see from this that non-neuronal cell types have drastically decreased sample sizes when split to brain regions; we will pick neurons from MTG and CgG as well as non-neuronal cell types from all brain regions for our demo/this project
+table(new_metadata_filtered[,c("subclass_label", "region_label")], useNA = "ifany") #we can see from this that non-neuronal cell types have drastically decreased sample sizes when split to brain regions
 
 table(new_metadata_filtered[,c("class_label", "region_label")], useNA = "ifany") #re-illustrate the point above
-
-new_metadata_filtered <- new_metadata_filtered[!(new_metadata_filtered$class_label!="Non-neuronal") | (new_metadata_filtered$region_label %in% c("CgG", "MTG")),] #filter out neurons from regions other than CgG or MTG
-
-table(new_metadata_filtered[,c("class_label", "region_label")], useNA = "ifany") #see our sample distribution now
-table(new_metadata_filtered[,c("subclass_label", "region_label")], useNA = "ifany") #see our sample distribution now
 
 new_metadata_filtered$NeuN <- new_metadata_filtered$class_label #make a new variable for classifying as neuron/nonneuron
 new_metadata_filtered[new_metadata_filtered$NeuN != "Non-neuronal", "NeuN"] <- "Neuronal" #change gabaergic/glutamatergic to Neuronal
 table(new_metadata_filtered[,c("NeuN", "region_label")], useNA = "ifany") #see our sample distribution now
 
-new_metadata_filtered$NeuN_Region <- paste0(new_metadata_filtered$region_label, "_", new_metadata_filtered$NeuN) #this variable will help us remove MTG or CgG neurons later in the analysis
+new_metadata_filtered$NeuN_Region <- paste0(new_metadata_filtered$region_label, "_", new_metadata_filtered$NeuN) #may be useful for filtering later on
 table(new_metadata_filtered$NeuN_Region, useNA = "ifany") #final view of our sample distribution
 
 ```
@@ -47,7 +38,7 @@ Now we can load our data.
 
 ```{r, loading_data}
 
-new_count_matrix <- read.csv("/external/rprshnas01/netdata_kcni/stlab/AIBS_scRNAseq_2019/human/matrix.csv", stringsAsFactors=FALSE) #this file corresponds to https://idk-etl-prod-download-bucket.s3.amazonaws.com/aibs_human_ctx_smart-seq/matrix.csv 
+new_count_matrix <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/matrix.csv", stringsAsFactors=FALSE) #this file corresponds to https://idk-etl-prod-download-bucket.s3.amazonaws.com/aibs_human_ctx_smart-seq/matrix.csv 
 
 new_count_matrix[1:10,1:10] #preview of uploaded data
 row.names(new_count_matrix) <- new_count_matrix$sample_name #set rownames
