@@ -959,9 +959,6 @@ t.test(mathys_temp_subject_metadata$age_death[mathys_temp_subject_metadata$patho
 t.test(mathys_temp_subject_metadata$ncell[mathys_temp_subject_metadata$pathoAD=="1"], 
        mathys_temp_subject_metadata$ncell[mathys_temp_subject_metadata$pathoAD=="0"])
 
-#### temp ####
-saveRDS(Seu_mathys_obj, file = "Seu_mathys_obj.rds")
-
 #### collapse AIBS IT ####
 
 unique(Idents(Seu_AIBS_obj))
@@ -1101,9 +1098,18 @@ Result_df_MTGandCgG_lfct1.5$has_ensembl <- Result_df_MTGandCgG_lfct1.5$ensembl_g
 table(Result_df_MTGandCgG_lfct2.0[, c("cluster", "has_ensembl")])
 table(Result_df_MTGandCgG_lfct1.5[, c("cluster", "has_ensembl")])
 
-new_AIBS_markers_mast_MTGandCgG_screen <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 0.1, min.pct = 0.1, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+### clean and/or export
+
+Result_df_MTGandCgG_lfct2.0 <- Result_df_MTGandCgG_lfct2.0[, c(1:3,20,22:23,21,5,7,13,17,4,24)]
+colnames(Result_df_MTGandCgG_lfct2.0)[c(4,8:11)] <- c("subclass", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df_MTGandCgG_lfct2.0, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2_results.csv") #save/export results
+write.csv(Result_df_MTGandCgG_lfct2.0[,1:11], "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2_results.csv") #save/export results
 
 ### compare
+
+new_AIBS_markers_mast_MTGandCgG_screen <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 0.1, min.pct = 0.1, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+
 
 new_comparator <- Result_df_MTGandCgG_lfct2.0
 new_comparator <- new_comparator[new_comparator$has_ensembl == T,]
@@ -1115,3 +1121,176 @@ intersect(new_CgG_results[new_CgG_results$subclass == subclass_to_focus, "gene"]
 
 intersect(Result_df_MTGandCgG[Result_df_MTGandCgG$cluster == subclass_to_focus, "gene"], new_comparator[new_comparator$cluster == subclass_to_focus, "gene"])
 union(Result_df_MTGandCgG[Result_df_MTGandCgG$cluster == subclass_to_focus, "gene"], new_comparator[new_comparator$cluster == subclass_to_focus, "gene"])
+
+#### PVALB plot ####
+
+Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj.rds")
+names(Seu_AIBS_obj@meta.data)
+Idents(Seu_AIBS_obj) <- "subclass_label"
+Seu_AIBS_obj <- subset(Seu_AIBS_obj, idents = "PVALB", invert = F) #remove "CgG_Neuronal" cells
+names(Seu_AIBS_obj@meta.data)
+Idents(Seu_AIBS_obj) <- "region_label"
+
+PVALB_Matrix <- as.data.frame(Seu_AIBS_obj@assays$RNA@data)
+PVALB_Matrix <- PVALB_Matrix[c("PVALB", "SST"),]
+PVALB_Matrix <- t(PVALB_Matrix)
+PVALB_Matrix <- as.data.frame(PVALB_Matrix)
+PVALB_Meta <- as.data.frame(Seu_AIBS_obj@meta.data)
+
+PVALB_graph <- merge(PVALB_Matrix, PVALB_Meta, by = "row.names")
+unique(PVALB_graph[,c("region_label", "region_color")])
+
+library(ggplot2)
+
+#scale_fill_manual(values=c("MTG" = "#5CCCCC",
+#                           "V1C" = "#CC0099",
+#                           "CgG" = "#CCA83D",
+#                           "M1lm" = "#00FF40",
+#                           "S1ul" = "#2E4999",
+#                           "S1lm" = "#9326FF",
+#                           "M1ul" = "#589917",
+#                           "A1C"  = "#FF7373")) +
+
+ggplot(PVALB_graph[PVALB_graph$region_label %in% c("MTG", "CgG", "V1C"),], aes(x=region_label, y=PVALB, fill=region_label)) + 
+  geom_boxplot() +
+  #geom_jitter(width = 0.2, alpha = 0.3, size = 0.6) +
+  ylab('Normalized PVALB mRNA expression (CPM)') +
+  xlab('Brain region from AIBS snRNAseq SMART-Seq v4 dataset') +
+  scale_fill_manual(values=c("MTG" = "#5CCCCC",
+                             "V1C" = "#CC0099",
+                             "CgG" = "#CCA83D")) +
+  theme_classic() +
+  theme(legend.position = 'none',
+        text = element_text(size=8), 
+        axis.title.x = element_text(size = 10, margin = margin(t = 7, r = 0, b = 0, l = 0)),
+        axis.text.x = element_text(size = 8),
+        axis.title.y = element_text(size = 10, margin = margin(t = 0, r = 7, b = 0, l = 0)),
+        axis.text.y = element_text(size = 8)) 
+
+
+ggsave(dpi = 300, 
+       units = "mm", 
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Misc",
+       filename = "PVALB.jpg",
+       device = "jpeg")
+
+#### get excit/inhib markers from MTG + CgG ####
+
+### prep data
+new_Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/new_Seu_AIBS_obj.rds")
+
+table(new_Seu_AIBS_obj$NeuN_Region) #double check that we have all the cells we want
+table(new_Seu_AIBS_obj$class_label) #double check what classes we have
+
+Idents(new_Seu_AIBS_obj) <- "class_label" #assign "class_label" as the key grouping variable now
+table(Idents(new_Seu_AIBS_obj)) #see # of cells in each class
+
+### screen data
+
+library("MAST") #as needed
+
+### find markers
+
+new_AIBS_markers_mast_MTGandCgG_lfct2.0_class <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.0, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_MTGandCgG_lfct2.0_class <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.0, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+
+### for mast
+length(unique(new_AIBS_markers_mast_MTGandCgG_lfct2.0_class$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_MTGandCgG_lfct2.0_class[duplicated(new_AIBS_markers_mast_MTGandCgG_lfct2.0_class$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_MTGandCgG_lfct2.0_class <- new_AIBS_markers_mast_MTGandCgG_lfct2.0_class[!(new_AIBS_markers_mast_MTGandCgG_lfct2.0_class$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_MTGandCgG_lfct2.0_class$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_MTGandCgG_lfct2.0_class[duplicated(new_AIBS_markers_roc_MTGandCgG_lfct2.0_class$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_MTGandCgG_lfct2.0_class <- new_AIBS_markers_roc_MTGandCgG_lfct2.0_class[!(new_AIBS_markers_roc_MTGandCgG_lfct2.0_class$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_MTGandCgG_lfct2.0_class$gene, new_AIBS_markers_roc_MTGandCgG_lfct2.0_class$gene)) #see intersect of marker genes
+
+### combine
+Result_df_MTGandCgG_lfct2.0_class <- merge(new_AIBS_markers_roc_MTGandCgG_lfct2.0_class, new_AIBS_markers_mast_MTGandCgG_lfct2.0_class, by = "gene", all.x = T, all.y = T) #combine the marker df
+
+identical(Result_df_MTGandCgG_lfct2.0_class[,c("avg_logFC.x", "pct.1.x", "pct.2.x", "cluster.x")],
+          Result_df_MTGandCgG_lfct2.0_class[,c("avg_logFC.y", "pct.1.y", "pct.2.y", "cluster.y")])
+
+identical(Result_df_MTGandCgG_lfct2.0_class$avg_logFC.x, Result_df_MTGandCgG_lfct2.0_class$avg_logFC.y)
+identical(Result_df_MTGandCgG_lfct2.0_class$pct.1.x, Result_df_MTGandCgG_lfct2.0_class$pct.1.y)
+identical(Result_df_MTGandCgG_lfct2.0_class$pct.2.x, Result_df_MTGandCgG_lfct2.0_class$pct.2.y)
+identical(Result_df_MTGandCgG_lfct2.0_class$cluster.x, Result_df_MTGandCgG_lfct2.0_class$cluster.y)
+
+### to add entrez and ensembl IDs to the output/result df
+
+Result_df_MTGandCgG_lfct2.0_class <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_MTGandCgG_lfct2.0_class, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+
+Result_df_MTGandCgG_lfct2.0_class$ensembl_gene_id[is.na(Result_df_MTGandCgG_lfct2.0_class$ensembl_gene_id)] <- "NA"
+Result_df_MTGandCgG_lfct2.0_class$has_ensembl <- Result_df_MTGandCgG_lfct2.0_class$ensembl_gene_id != "NA"
+
+table(Result_df_MTGandCgG_lfct2.0_class[, c("cluster.x", "has_ensembl")])
+
+### clean and/or export
+
+Result_df_MTGandCgG_lfct2.0_class <- Result_df_MTGandCgG_lfct2.0_class[, c(1:3,10,8,9,7,4,6,11,15,17)]
+colnames(Result_df_MTGandCgG_lfct2.0_class)[c(4:11)] <- c("class", "pct.1", "pct.2", "avg_logFC", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df_MTGandCgG_lfct2.0_class[,1:11], "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2_results_class.csv") #save/export results
+
+#### get neu/nonneu markers from MTG + CgG ####
+
+
+### prep data
+new_Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/new_Seu_AIBS_obj.rds")
+
+table(new_Seu_AIBS_obj$NeuN_Region) #double check that we have all the cells we want
+table(new_Seu_AIBS_obj$NeuN) #double check what groups we have
+
+Idents(new_Seu_AIBS_obj) <- "NeuN" #assign "NeuN" as the key grouping variable now
+table(Idents(new_Seu_AIBS_obj)) #see # of cells in each group
+
+### screen data
+
+library("MAST") #as needed
+
+### find markers
+
+new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.0, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN <- FindAllMarkers(new_Seu_AIBS_obj, slot = "data", logfc.threshold = 2.0, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+
+### for mast
+length(unique(new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN[duplicated(new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN <- new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN[!(new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN[duplicated(new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN <- new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN[!(new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN$gene, new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN$gene)) #see intersect of marker genes
+
+### combine
+Result_df_MTGandCgG_lfct2.0_NeuN <- merge(new_AIBS_markers_roc_MTGandCgG_lfct2.0_NeuN, new_AIBS_markers_mast_MTGandCgG_lfct2.0_NeuN, by = "gene", all.x = T, all.y = T) #combine the marker df
+
+identical(Result_df_MTGandCgG_lfct2.0_NeuN[,c("avg_logFC.x", "pct.1.x", "pct.2.x", "cluster.x")],
+          Result_df_MTGandCgG_lfct2.0_NeuN[,c("avg_logFC.y", "pct.1.y", "pct.2.y", "cluster.y")])
+
+identical(Result_df_MTGandCgG_lfct2.0_NeuN$avg_logFC.x, Result_df_MTGandCgG_lfct2.0_NeuN$avg_logFC.y)
+identical(Result_df_MTGandCgG_lfct2.0_NeuN$pct.1.x, Result_df_MTGandCgG_lfct2.0_NeuN$pct.1.y)
+identical(Result_df_MTGandCgG_lfct2.0_NeuN$pct.2.x, Result_df_MTGandCgG_lfct2.0_NeuN$pct.2.y)
+identical(Result_df_MTGandCgG_lfct2.0_NeuN$cluster.x, Result_df_MTGandCgG_lfct2.0_NeuN$cluster.y)
+
+### to add entrez and ensembl IDs to the output/result df
+
+Result_df_MTGandCgG_lfct2.0_NeuN <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_MTGandCgG_lfct2.0_NeuN, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+
+Result_df_MTGandCgG_lfct2.0_NeuN$ensembl_gene_id[is.na(Result_df_MTGandCgG_lfct2.0_NeuN$ensembl_gene_id)] <- "NA"
+Result_df_MTGandCgG_lfct2.0_NeuN$has_ensembl <- Result_df_MTGandCgG_lfct2.0_NeuN$ensembl_gene_id != "NA"
+
+table(Result_df_MTGandCgG_lfct2.0_NeuN[, c("cluster.x", "has_ensembl")])
+
+### clean and/or export
+
+Result_df_MTGandCgG_lfct2.0_NeuN <- Result_df_MTGandCgG_lfct2.0_NeuN[, c(1:3,10,8,9,7,4,6,11,15,17)]
+colnames(Result_df_MTGandCgG_lfct2.0_NeuN)[c(4:11)] <- c("nueron_or_not", "pct.1", "pct.2", "avg_logFC", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df_MTGandCgG_lfct2.0_NeuN[,1:11], "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2_results_NeuN.csv") #save/export results
