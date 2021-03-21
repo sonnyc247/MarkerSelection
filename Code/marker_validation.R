@@ -1,16 +1,20 @@
-### packages
+#### packages ####
 
 library(Seurat)
 library(dplyr)
 library(MAST)
 library(metap)
+library(gplots)
+library(RColorBrewer)
+
+#### DE expression testing ####
 
 ### prep/set-up
 
 Seu_test_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
 Seu_test_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
 Seu_test_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
-Seu_test_object <- subset(Seu_test_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500)
+Seu_test_object <- subset(Seu_test_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
 
 names(Seu_test_object@meta.data)
 Idents(Seu_test_object) <- "predicted.id"
@@ -75,7 +79,7 @@ evaluation_df <- validation_results_Cain[validation_results_Cain$group_gene %in%
 evaluation_df <- validation_results_Mathys[validation_results_Mathys$group_gene %in% Result_df_MTGandCgG_lfct2.0$group_gene,]
 evaluation_df <- validation_results_Zhou[validation_results_Zhou$group_gene %in% Result_df_MTGandCgG_lfct2.0$group_gene,]
 
-### retest zhou cells
+### retest zhou cells (looking for why some markers don't show up - maybe due to things like min.cells.feature, for example)
 
 validation_mast_results <- FindAllMarkers(Seu_test_object, 
                                           slot = "data", 
@@ -92,9 +96,7 @@ cluster.averages <- AverageExpression(Seu_test_object)
 cluster.averages <- cluster.averages$RNA
 cluster.averages <- cluster.averages[retest,]
 
-### meta-p value combination
-
-
+#### meta-p value combination ####
 
 validation_mast_results <- validation_results_Mathys
 validation_mast_results <- validation_results_Cain
@@ -141,3 +143,39 @@ write.csv(metap_holder, "subclass_MTGandCgG_lfct2.0_marker_validation_metap.csv"
 #  print(cellgroup)
 #  print(ACAT(test[test$subclass == cellgroup,"p_val"]))
 #}
+
+
+#### confusion matrix/heatmap ####
+
+# getting data
+
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_plot_object <- subset(Seu_test_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+# seeing columns to graph, as appropriate for dataset
+
+unique(Seu_plot_object$subtype)
+unique(Seu_plot_object$predicted.id)
+
+# get numbers for confusion matrix
+
+confusion_martix_hold <- as.matrix(table(Seu_plot_object$subtype, Seu_plot_object$predicted.id))
+confusion_martix_hold <- as.matrix(confusion_martix_hold)
+
+# plot heatmap
+
+display.brewer.all()
+dev.off() #as needed to reset graphics
+
+heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
+heatmap(log(confusion_martix_hold+1), col=brewer.pal(9 ,"Blues"), keep.dendro = F)
+
+pheatmap::pheatmap(log(confusion_martix_hold+1), treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"))
+
+confusion_martix_hold_man <- confusion_martix_hold[,c(1,13,2,10,9,4,12,16,8,5,6,7,11,15,14,3)]
+pheatmap::pheatmap(log(confusion_martix_hold_man+1), treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows=T, cluster_cols=F)
+
+heatmap.2(log(confusion_martix_hold+1))
+
