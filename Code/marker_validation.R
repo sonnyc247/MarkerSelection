@@ -6,6 +6,8 @@ library(MAST)
 library(metap)
 library(gplots)
 library(RColorBrewer)
+library(ggplot2)
+library(magrittr)
 
 #### DE expression testing ####
 
@@ -145,7 +147,7 @@ write.csv(metap_holder, "subclass_MTGandCgG_lfct2.0_marker_validation_metap.csv"
 #}
 
 
-#### confusion matrix/heatmap ####
+#### confusion matrix/heatmap + QC scores ####
 
 # getting data
 
@@ -158,11 +160,14 @@ Seu_plot_object <- subset(Seu_test_object, subset = nFeature_RNA > 200 & nFeatur
 
 unique(Seu_plot_object$subtype)
 unique(Seu_plot_object$predicted.id)
+unique(Seu_plot_object$Subcluster)
 
 # get numbers for confusion matrix
 
 confusion_martix_hold <- as.matrix(table(Seu_plot_object$subtype, Seu_plot_object$predicted.id))
+confusion_martix_hold <- as.matrix(table(Seu_plot_object$Subcluster, Seu_plot_object$predicted.id))
 confusion_martix_hold <- as.matrix(confusion_martix_hold)
+confusion_martix_hold_pct <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
 
 # plot heatmap
 
@@ -172,10 +177,98 @@ dev.off() #as needed to reset graphics
 heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
 heatmap(log(confusion_martix_hold+1), col=brewer.pal(9 ,"Blues"), keep.dendro = F)
 
-pheatmap::pheatmap(log(confusion_martix_hold+1), treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"))
+pheatmap::pheatmap(confusion_martix_hold_pct, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
 
-confusion_martix_hold_man <- confusion_martix_hold[,c(1,13,2,10,9,4,12,16,8,5,6,7,11,15,14,3)]
-pheatmap::pheatmap(log(confusion_martix_hold_man+1), treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows=T, cluster_cols=F)
+confusion_martix_hold_man <- confusion_martix_hold_pct[,c(2,8,9,1,3,15,4,12,16,5,6,7,13,10,11,14)]
+pheatmap::pheatmap(confusion_martix_hold_man_Cain, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows=T, cluster_cols=F)
 
-heatmap.2(log(confusion_martix_hold+1))
+confusion_martix_hold_man_Hodge <- confusion_martix_hold_man
 
+#pheatmap::pheatmap(confusion_martix_hold_man_pct, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows=T, cluster_cols=F)
+#heatmap.2(log(confusion_martix_hold+1))
+
+#### troubleshoot IT ####
+
+Idents(Seu_plot_object) <- "predicted.id"
+Seu_plot_object <- subset(Seu_plot_object, idents = c("IT", "Endothelial"))
+
+IT_Troubleshooter <- Seu_plot_object@meta.data
+
+IT_Troubleshooter <- IT_Troubleshooter[,-(5:9)]
+IT_Troubleshooter <- IT_Troubleshooter[,-31]
+IT_Troubleshooter <- IT_Troubleshooter[,-(29:30)]
+IT_Troubleshooter$prediction.score.2nd <- 0 
+IT_Troubleshooter$predicted.id.next <- "Unknown"
+
+for (cell in (row.names(IT_Troubleshooter))){
+  rowtorank <- IT_Troubleshooter[cell,9:27]
+  rankedrows <- as.data.frame(rank(-rowtorank, ties.method = "min"))
+  rankedrows <- tibble::rownames_to_column(rankedrows)
+  second_type <- rankedrows[rankedrows[,2] == 2,1]
+  IT_Troubleshooter[cell,"predicted.id.next"] <-  paste(unlist(second_type), collapse='_')
+  IT_Troubleshooter[cell,"prediction.score.2nd"] <- rowtorank[,second_type[1]]
+}
+
+IT_Troubleshooter$top2_prediction_diff <- IT_Troubleshooter$prediction.score.max - IT_Troubleshooter$prediction.score.2nd
+IT_Troubleshooter$prediction_consistency <- "Not_consistent"
+table(IT_Troubleshooter[,c("subtype", "predicted.id")])
+IT_Troubleshooter[(IT_Troubleshooter$predicted.id == "Endothelial") &
+                  (IT_Troubleshooter$subtype %in% c("Endo.1", "Endo.2", "Endo.4", "Endo.3")),"prediction_consistency"] <- "Consistent"
+IT_Troubleshooter[(IT_Troubleshooter$predicted.id == "IT") &
+                    (IT_Troubleshooter$subtype %in% c("Exc.Exc.RORB_L5_IT_2", "Exc.Exc.L6.IT.THEMIS", "Exc.Exc.RORB_L5_IT_1")),"prediction_consistency"] <- "Consistent"
+IT_Troubleshooter[(IT_Troubleshooter$predicted.id == "IT") &
+                    (IT_Troubleshooter$subtype %in% c("Exc.Exc.L5", "Exc.Exc.L3", "Exc.Exc.FEZEF2.L5.ET")),"prediction_consistency"] <- "Maybe"
+IT_Troubleshooter[(IT_Troubleshooter$predicted.id == "IT") &
+                    (IT_Troubleshooter$subtype %in% c("None.NA")),"prediction_consistency"] <- "NA"
+
+ggplot(IT_Troubleshooter, aes(x = prediction_consistency, y = prediction.score.max)) + 
+  geom_violin(scale = "width") +
+  geom_jitter(size = 0.2, alpha = 0.15) +
+  #geom_boxplot(outlier.size = 2.5, outlier.alpha = 0.1) +
+  facet_wrap(~predicted.id * cogdx, scales = "free") +
+  scale_color_manual(values=c("red", "blue")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+ggplot(IT_Troubleshooter, aes(x = prediction_consistency, y = prediction.score.2nd)) + 
+  #geom_violin(scale = "width") +
+  #geom_jitter(size = 0.2, alpha = 0.15) +
+  geom_boxplot(outlier.size = 2.5, outlier.alpha = 0.1) +
+  facet_wrap(~predicted.id, scales = "free") +
+  scale_color_manual(values=c("red", "blue")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+ggplot(IT_Troubleshooter, aes(x = prediction_consistency, y = top2_prediction_diff)) + 
+  #geom_violin(scale = "width") +
+  #geom_jitter(size = 0.2, alpha = 0.15) +
+  geom_boxplot(outlier.size = 2.5, outlier.alpha = 0.1) +
+  facet_wrap(~predicted.id, scales = "free") +
+  scale_color_manual(values=c("red", "blue")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+### heatmap of second best alignment ###
+
+IT_inconsistent <- IT_Troubleshooter[IT_Troubleshooter$predicted.id == "IT",]
+IT_inconsistent <- IT_inconsistent[IT_inconsistent$prediction_consistency == "Not_consistent",]
+IT_conf_mtx <- as.matrix(table(IT_inconsistent$subtype, IT_inconsistent$predicted.id.next))
+IT_conf_mtx <- IT_conf_mtx[,-18]
+IT_conf_mtx <- (IT_conf_mtx/rowSums(IT_conf_mtx))*100
+pheatmap::pheatmap(IT_conf_mtx, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+
+#test <- colRanks(as.matrix(IT_Troubleshooter[,9:27]),)
+#IT_Troubleshooter_2ndmax <- apply(IT_Troubleshooter[,9:27], 1, FUN = function(x) which(x == sort(x, decreasing = TRUE)[2]))
+
+
+#### filter based on prediction scores ####
+
+metadata_for_plot <- Seu_plot_object@meta.data
+metadata_for_plot %<>% mutate(LOAD = case_when((braaksc >= 4 & ceradsc <= 2 & cogdx == 4) ~ 'AD',
+                                               (braaksc <= 3 & ceradsc >= 3 & cogdx == 1) ~ 'C',
+                                               TRUE ~ 'OTHER')) 
+
+table(metadata_for_plot[, c("prediction.score.max")] > 0.9)
+test <- (metadata_for_plot[,14:32] > 0.9)
+table(test)
+apply(X = (metadata_for_plot[,14:32] > 0.9), 2, FUN = table)
