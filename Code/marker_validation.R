@@ -8,6 +8,7 @@ library(gplots)
 library(RColorBrewer)
 library(ggplot2)
 library(magrittr)
+library(tidyr)
 
 #### DE expression testing ####
 
@@ -154,36 +155,50 @@ write.csv(metap_holder, "subclass_MTGandCgG_lfct2.0_marker_validation_metap.csv"
 Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
 Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
 Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
-Seu_plot_object <- subset(Seu_test_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+Seu_plot_object <- subset(Seu_plot_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
 
 # seeing columns to graph, as appropriate for dataset
 
-unique(Seu_plot_object$subtype)
+unique(Seu_plot_object$subtype) # for cain
 unique(Seu_plot_object$predicted.id)
-unique(Seu_plot_object$Subcluster)
+unique(Seu_plot_object$Subcluster) # for mathys
+
+# qc thresh cut for IT cells
+
+ncol(Seu_plot_object)
+table(Seu_plot_object$predicted.id) #for cain
+Seu_plot_object <- subset(Seu_plot_object, subset = predicted.id == "IT" & prediction.score.max < 0.8, invert = T) 
+table(Seu_plot_object$predicted.id)
 
 # get numbers for confusion matrix
 
-confusion_martix_hold <- as.matrix(table(Seu_plot_object$subtype, Seu_plot_object$predicted.id))
-confusion_martix_hold <- as.matrix(table(Seu_plot_object$Subcluster, Seu_plot_object$predicted.id))
+confusion_martix_hold <- as.matrix(table(Seu_plot_object$subtype, Seu_plot_object$predicted.id)) # for cain
+confusion_martix_hold <- as.matrix(table(Seu_plot_object$Subcluster, Seu_plot_object$predicted.id)) # for mathys
 confusion_martix_hold <- as.matrix(confusion_martix_hold)
-confusion_martix_hold_pct <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
+confusion_martix_hold <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
 
 # plot heatmap
 
 display.brewer.all()
 dev.off() #as needed to reset graphics
 
-heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
-heatmap(log(confusion_martix_hold+1), col=brewer.pal(9 ,"Blues"), keep.dendro = F)
+#heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
 
-pheatmap::pheatmap(confusion_martix_hold_pct, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
 
-confusion_martix_hold_man <- confusion_martix_hold_pct[,c(2,8,9,1,3,15,4,12,16,5,6,7,13,10,11,14)]
-pheatmap::pheatmap(confusion_martix_hold_man_Cain, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows=T, cluster_cols=F)
+confusion_martix_hold_Cain <- confusion_martix_hold
+confusion_martix_hold_Cain_filt <- confusion_martix_hold
+confusion_martix_hold_Mathys <- confusion_martix_hold
+confusion_martix_hold_Mathys_filt <- confusion_martix_hold
 
-confusion_martix_hold_man_Hodge <- confusion_martix_hold_man
+confusion_martix_hold <- confusion_martix_hold_Cain
+confusion_martix_hold_filt <- confusion_martix_hold_Cain_filt
+confusion_martix_hold <- confusion_martix_hold_Mathys
+confusion_martix_hold_filt <- confusion_martix_hold_Mathys_filt
 
+
+#confusion_martix_hold_man <- confusion_martix_hold[,c(2,8,9,1,3,15,4,12,16,5,6,7,13,10,11,14)]
 #pheatmap::pheatmap(confusion_martix_hold_man_pct, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows=T, cluster_cols=F)
 #heatmap.2(log(confusion_martix_hold+1))
 
@@ -263,12 +278,83 @@ pheatmap::pheatmap(IT_conf_mtx, treeheight_row = 0, treeheight_col = 0, color = 
 
 #### filter based on prediction scores ####
 
-metadata_for_plot <- Seu_plot_object@meta.data
-metadata_for_plot %<>% mutate(LOAD = case_when((braaksc >= 4 & ceradsc <= 2 & cogdx == 4) ~ 'AD',
-                                               (braaksc <= 3 & ceradsc >= 3 & cogdx == 1) ~ 'C',
-                                               TRUE ~ 'OTHER')) 
+# getting data
 
-table(metadata_for_plot[, c("prediction.score.max")] > 0.9)
-test <- (metadata_for_plot[,14:32] > 0.9)
-table(test)
-apply(X = (metadata_for_plot[,14:32] > 0.9), 2, FUN = table)
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_plot_object <- subset(Seu_plot_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+metadata_for_predscore_breakdown <- Seu_plot_object@meta.data
+
+Projid_info <- readRDS("~/collabgit/AD_snRNAseq/data/ROSmaster.rds") #load ROS metadata
+metadata_for_predscore_breakdown <- merge(metadata_for_predscore_breakdown, Projid_info, by = "projid", all.x = T, all.y = F)
+remove(Projid_info)
+
+metadata_for_predscore_breakdown %<>% mutate(LOAD = case_when((braaksc >= 4 & ceradsc <= 2 & cogdx == 4) ~ 'AD',
+                                                              (braaksc <= 3 & ceradsc >= 3 & cogdx == 1) ~ 'C',
+                                                              TRUE ~ 'OTHER')) 
+remove(Seu_plot_object)
+metadata_for_predscore_breakdown$over.9 <- metadata_for_predscore_breakdown[, c("prediction.score.max")] > 0.9
+metadata_for_predscore_breakdown$over.8 <- metadata_for_predscore_breakdown[, c("prediction.score.max")] > 0.8
+
+#metadata_for_predscore_breakdown$cell_name <- paste0(metadata_for_predscore_breakdown$orig.ident, "_", 
+#                                                     metadata_for_predscore_breakdown$nCount_RNA, "_",
+#                                                     metadata_for_predscore_breakdown$nFeature_RNA) #for zhou only
+
+#metadata_for_predscore_breakdown$cell_name <- metadata_for_predscore_breakdown$TAG #for mathys only
+
+metadata_for_predscore_breakdown <- metadata_for_predscore_breakdown[,c("cell_name", "predicted.id", "prediction.score.max", "over.9", "over.8", "projid", "LOAD")]
+
+metad_for_pb_Cain <- metadata_for_predscore_breakdown
+metad_for_pb_Zhou <- metadata_for_predscore_breakdown
+metad_for_pb_Mathys <- metadata_for_predscore_breakdown
+
+metadata_for_predscore_breakdown <- metad_for_pb_Cain
+metadata_for_predscore_breakdown <- metad_for_pb_Zhou
+metadata_for_predscore_breakdown <- metad_for_pb_Mathys
+
+### table
+
+predbreakdown <- as.data.frame(table(metadata_for_predscore_breakdown[,c("over.9", "predicted.id", "projid")], useNA = "ifany"))
+predbreakdown <- merge(predbreakdown, unique(metadata_for_predscore_breakdown[,c("projid", "LOAD")]), all.x = TRUE, by = "projid")
+predbreakdown <- spread(predbreakdown, value = "Freq", key = "over.9")
+names(predbreakdown)[4:5] <- c("Under_thresh", "Over_thresh")
+predbreakdown$Total <- predbreakdown$Under_thresh + predbreakdown$Over_thresh
+predbreakdown$Under_thresh_pct <- (predbreakdown$Under_thresh/predbreakdown$Total)*100
+predbreakdown$Over_thresh_pct <- (predbreakdown$Over_thresh/predbreakdown$Total)*100
+predbreakdown <- predbreakdown[predbreakdown$LOAD %in% c("AD", "C"),] #as desired
+
+### plot
+
+predforplot <- as.data.frame(table(metadata_for_predscore_breakdown[,c("over.9", "predicted.id", "projid")], useNA = "ifany"))
+predforplot <- merge(predforplot, unique(metadata_for_predscore_breakdown[,c("projid", "LOAD")]), all.x = TRUE, by = "projid")
+predforplot <- predforplot[predforplot$LOAD %in% c("AD", "C"),] #as desired
+
+ggplot() +
+  geom_bar(data=predforplot, aes(y = Freq, x = predicted.id, fill = over.9), stat="identity",
+           position='fill') +
+  theme_classic() + 
+  facet_wrap(~LOAD*projid, scales = "fixed") +
+  scale_fill_manual(values = c("grey", "red")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  ylab("Cell pass percentage") + xlab("Patient ID") + labs(fill = "Prediction score pass/fail breakdown") +
+  theme(axis.text.x = element_text(angle = 90))
+
+ggplot() +
+  geom_bar(data=predforplot, aes(y = Freq, x = predicted.id, fill = over.9), stat="identity",
+           position='fill') +
+  theme_classic() + 
+  facet_wrap(~LOAD, scales = "fixed", ncol = 1) +
+  scale_fill_manual(values = c("grey", "red")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  ylab("Cell pass percentage") + xlab("Patient ID") + labs(fill = "Prediction score pass/fail breakdown") +
+  theme(axis.text.x = element_text(angle = 90))
+
+ggplot(predbreakdown, aes(x = LOAD, y = Over_thresh_pct)) + 
+  #geom_jitter(size = 0.2, alpha = 0.15) +
+  geom_boxplot(outlier.size = 2.5, outlier.alpha = 0.1) +
+  facet_wrap(~predicted.id, scales = "fixed") +
+  scale_color_manual(values=c("red", "blue")) +
+  theme_classic() +
+  theme(legend.position = "none")

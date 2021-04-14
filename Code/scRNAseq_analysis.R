@@ -5,7 +5,7 @@ library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(readr)
-
+library(magrittr)
 
 #### Data loading - Cain et al ####
 
@@ -446,6 +446,109 @@ table(mathys_cell_prop_meta_long$subclass, mathys_cell_prop_meta_long$pathoAD)
 export_holder <- mathys_cell_prop_meta_long
 colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
 write.csv(export_holder, "mathys_cell_type_prop_df.csv")
+
+#### Revisited Proportion analysis (filter IT) ####
+
+# load object
+Seu_prop_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
+Seu_prop_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_prop_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_prop_object <- subset(Seu_prop_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+# filter bad-fit IT cells
+ncol(Seu_prop_object)
+table(Seu_prop_object$predicted.id) 
+Seu_prop_object <- subset(Seu_prop_object, subset = predicted.id == "IT" & prediction.score.max < 0.8, invert = T) 
+table(Seu_prop_object$predicted.id)
+
+# pull metadata with subclass annotations into data frame
+prop_meta_df <- Seu_prop_object@meta.data %>% as.data.frame()
+prop_meta_df <- prop_meta_df %>% rename(subclass = predicted.id)
+
+# read in rosmap metadata from dan's lab folder
+ros_meta = readRDS("~/collabgit/AD_snRNAseq/data/ROSmaster.rds")
+
+# select just the columns from ros master that we need
+ros_meta_small = ros_meta %>% select(projid, pathoAD, gpath, age_death, msex, braaksc, ceradsc, cogdx)
+
+# FOR MATHYS: two samples are missing diagnoses - these are AD cases according to the mathys paper 
+ros_meta_small[is.na(ros_meta_small$pathoAD), 'pathoAD'] = 1 # 1 is the label for AD in this dataset
+
+# format metadata and make new LOAD variable
+ros_meta_small = ros_meta_small %>% mutate(pathoAD = factor(pathoAD), msex = factor(msex))
+ros_meta_small %<>% mutate(LOAD = case_when((braaksc >= 4 & ceradsc <= 2 & cogdx == 4) ~ 'AD',
+                                            (braaksc <= 3 & ceradsc >= 3 & cogdx == 1) ~ 'C',
+                                            TRUE ~ 'OTHER')) 
+remove(ros_meta) # no longer needed
+
+# merge cell level meta with subject case information
+prop_meta_df <- prop_meta_df[,c("projid", "subclass", "orig.ident", "nCount_RNA", "nFeature_RNA")] # for cain and zhou; to avoid duplicated columns
+prop_meta_df = merge(prop_meta_df , ros_meta_small, by = 'projid')
+
+# count up cell counts per subclass and total per subject
+cell_type_counts_initial <- prop_meta_df %>% group_by(projid, subclass) %>% summarize(cell_type_count = n())
+
+cell_type_counts <- as.data.frame(table(cell_type_counts_initial$projid, cell_type_counts_initial$subclass))
+cell_type_counts$bridger <- paste0(cell_type_counts$Var1, "_", cell_type_counts$Var2)
+cell_type_counts_initial$bridger <- paste0(cell_type_counts_initial$projid, "_", cell_type_counts_initial$subclass)
+cell_type_counts <- merge(cell_type_counts[,-3], cell_type_counts_initial[,3:4], by = "bridger", all.x = T)
+cell_type_counts <- cell_type_counts[,2:4]
+colnames(cell_type_counts)[1:2] <- c("projid", "subclass")
+cell_type_counts$cell_type_count[is.na(cell_type_counts$cell_type_count)] <- 0
+
+tot_cell_counts <- prop_meta_df %>% group_by(projid) %>% summarize(tot_cell_counts = n())
+
+table(prop_meta_df$subclass, prop_meta_df$projid)
+
+# calculate cell proportions and standard errors per subclass per subject
+cell_prop_df <- merge(tot_cell_counts, cell_type_counts) %>% 
+  mutate(cell_type_prop <- cell_type_count / tot_cell_counts, 
+         cell_type_prop_se <- sqrt((cell_type_prop * (1 - cell_type_prop))/tot_cell_counts))
+
+names(cell_prop_df)[5] <- "cell_type_prop"
+names(cell_prop_df)[6] <- "cell_type_prop_se"
+
+# merge cell proportions with subject level meta
+cell_prop_meta_long <- merge(cell_prop_df, unique(prop_meta_df[,c("projid", "pathoAD", "gpath", "age_death", "msex", "braaksc", "ceradsc", "cogdx", "LOAD")]), by = "projid")
+
+cell_prop_meta_long %>% 
+  filter(subclass == "IT") %>% 
+  group_by(LOAD, subclass) %>% 
+  summarize(m = mean(cell_type_prop))
+
+# plot
+
+ggplot(cell_prop_meta_long, aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  facet_wrap(~ subclass, scales = "free") +
+  xlab('Cell types') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+ggplot(cell_prop_meta_long[cell_prop_meta_long$subclass == "IT",], aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  xlab('AD Group') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+table(cell_prop_meta_long$subclass, cell_prop_meta_long$LOAD)
+
+# export df for plotting
+
+export_holder <- cell_prop_meta_long
+colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+write.csv(export_holder, "zhou_cell_type_prop_df.csv")
+
 
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
