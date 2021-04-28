@@ -1010,6 +1010,7 @@ Result_df_ITcol$has_ensembl <- Result_df_ITcol$ensembl_gene_id != "NA"
 #### CgG and MTG only ####
 
 unique(new_Seu_AIBS_obj$NeuN_Region)
+unique(new_Seu_AIBS_obj$outlier_call)
 
 Idents(new_Seu_AIBS_obj) <- "subclass_label"
 unique(Idents(new_Seu_AIBS_obj))
@@ -1048,6 +1049,15 @@ Result_df_MTGandCgG <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id"
 
 Result_df_MTGandCgG$ensembl_gene_id[is.na(Result_df_MTGandCgG$ensembl_gene_id)] <- "NA"
 Result_df_MTGandCgG$has_ensembl <- Result_df_MTGandCgG$ensembl_gene_id != "NA"
+
+table(Result_df_MTGandCgG[, c("cluster", "has_ensembl")])
+
+### clean and/or export
+
+Result_df_MTGandCgG_final <- Result_df_MTGandCgG[, c(1:3,20,22:23,21,5,7,13,17,4,24)]
+colnames(Result_df_MTGandCgG_final)[c(4,8:11)] <- c("subclass", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df_MTGandCgG_final, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2.5_results.csv") #save/export results
 
 #### CgG and MTG only 2.0 lfct ####
 
@@ -1294,3 +1304,42 @@ Result_df_MTGandCgG_lfct2.0_NeuN <- Result_df_MTGandCgG_lfct2.0_NeuN[, c(1:3,10,
 colnames(Result_df_MTGandCgG_lfct2.0_NeuN)[c(4:11)] <- c("nueron_or_not", "pct.1", "pct.2", "avg_logFC", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
 
 write.csv(Result_df_MTGandCgG_lfct2.0_NeuN[,1:11], "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2_results_NeuN.csv") #save/export results
+
+#### "Crappy" Marker proportions lfct 2 vs 2.5 in mathys ####
+
+Seu_mathys_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds")
+names(Seu_mathys_obj@meta.data)
+Idents(Seu_mathys_obj)
+
+Idents(Seu_mathys_obj) <- "predicted.id"
+
+Mathys_subclass_cpm_avg <- AverageExpression(Seu_mathys_obj, slot = "data")
+Mathys_subclass_cpm_avg <- Mathys_subclass_cpm_avg$RNA
+
+Mathys_2.0_cpm_avg <- Mathys_subclass_cpm_avg[intersect(new_MTGnCgG_lfct2_results$gene, rownames(Mathys_subclass_cpm_avg)),]
+Mathys_2.5_cpm_avg <- Mathys_subclass_cpm_avg[intersect(Result_df_MTGandCgG_final$gene, rownames(Mathys_subclass_cpm_avg)),]
+
+Mathys_2.0_cpm_avg$Max_Express_Subclass <- colnames(Mathys_2.0_cpm_avg)[apply(Mathys_2.0_cpm_avg,1,function(x) which(x==max(x)))]
+Mathys_2.0_cpm_avg <- tibble::rownames_to_column(Mathys_2.0_cpm_avg)
+Mathys_2.0_cpm_avg <- merge(Mathys_2.0_cpm_avg, new_MTGnCgG_lfct2_results[,c("gene", "subclass")], by.x = "rowname", by.y = "gene")
+Mathys_2.0_cpm_avg$Good_marker <- Mathys_2.0_cpm_avg$Max_Express_Subclass == Mathys_2.0_cpm_avg$subclass
+Bad_marker_pct_Mathys2.0 <- as.data.frame(table(Mathys_2.0_cpm_avg[,c("subclass", "Good_marker")]))
+Bad_marker_pct_Mathys2.0 <- tidyr::spread(Bad_marker_pct_Mathys2.0, Good_marker, Freq)
+Bad_marker_pct_Mathys2.0$Total <- Bad_marker_pct_Mathys2.0[,"FALSE"] + Bad_marker_pct_Mathys2.0[,"TRUE"]
+Bad_marker_pct_Mathys2.0$Pct_good_2 <- (Bad_marker_pct_Mathys2.0[,"TRUE"] / Bad_marker_pct_Mathys2.0[,"Total"])*100
+
+Mathys_2.5_cpm_avg$Max_Express_Subclass <- colnames(Mathys_2.5_cpm_avg)[apply(Mathys_2.5_cpm_avg,1,function(x) which(x==max(x)))]
+Mathys_2.5_cpm_avg <- tibble::rownames_to_column(Mathys_2.5_cpm_avg)
+Mathys_2.5_cpm_avg <- merge(Mathys_2.5_cpm_avg, Result_df_MTGandCgG_final[,c("gene", "subclass")], by.x = "rowname", by.y = "gene")
+Mathys_2.5_cpm_avg$Good_marker <- Mathys_2.5_cpm_avg$Max_Express_Subclass == Mathys_2.5_cpm_avg$subclass
+Bad_marker_pct_Mathys2.5 <- as.data.frame(table(Mathys_2.5_cpm_avg[,c("subclass", "Good_marker")]))
+Bad_marker_pct_Mathys2.5 <- tidyr::spread(Bad_marker_pct_Mathys2.5, Good_marker, Freq)
+Bad_marker_pct_Mathys2.5$Total <- Bad_marker_pct_Mathys2.5[,"FALSE"] + Bad_marker_pct_Mathys2.5[,"TRUE"]
+Bad_marker_pct_Mathys2.5$Pct_good_2.5 <- (Bad_marker_pct_Mathys2.5[,"TRUE"] / Bad_marker_pct_Mathys2.5[,"Total"])*100
+
+Bad_marker_pct_combined <- merge(Bad_marker_pct_Mathys2.0, Bad_marker_pct_Mathys2.5, by = "subclass")
+Bad_marker_pct_combined$Pct2.5_minus_Pct2.0 <- Bad_marker_pct_combined$Pct_good_2.5 - Bad_marker_pct_combined$Pct_good_2
+colnames(Bad_marker_pct_combined) <- c("Subclass", "n_Bad_markers_lfct2", "n_Good_markers_lfct2", "n_Total_markers_lfct2", "pct_Good_markers_lfct2",
+                                       "n_Bad_markers_lfct2.5", "n_Good_markers_lfct2.5", "n_Total_markers_lfct2.5", "pct_Good_markers_lfct2.5", "Pct2.5_minus_Pct2.0")
+
+write.csv(Bad_marker_pct_combined, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Validation/Mathys_lfct_good_marker_pct.csv") #save/export results

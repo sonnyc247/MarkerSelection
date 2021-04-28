@@ -9,6 +9,7 @@ library(RColorBrewer)
 library(ggplot2)
 library(magrittr)
 library(tidyr)
+library(reshape2)
 
 #### DE expression testing ####
 
@@ -166,7 +167,7 @@ unique(Seu_plot_object$Subcluster) # for mathys
 # qc thresh cut for IT cells
 
 ncol(Seu_plot_object)
-table(Seu_plot_object$predicted.id) #for cain
+table(Seu_plot_object$predicted.id)
 Seu_plot_object <- subset(Seu_plot_object, subset = predicted.id == "IT" & prediction.score.max < 0.8, invert = T) 
 table(Seu_plot_object$predicted.id)
 
@@ -185,17 +186,71 @@ dev.off() #as needed to reset graphics
 #heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
 
 pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
-pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+#pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
 
+# get order information
+
+subclass_meta_info <- readr::read_csv("~/collabgit/AD_snRNAseq/data/subclass_meta_info.csv")
+
+# reorder confusion matrix
+
+col_order <- intersect(subclass_meta_info$subclass, colnames(confusion_martix_hold))
+confusion_martix_hold <- confusion_martix_hold[,col_order]
+
+# get clustered rownames
+clustered_holder <- pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = T, cluster_cols = F)
+clustered_holder <- rownames(confusion_martix_hold[clustered_holder$tree_row[["order"]],])
+
+# reorder cain
+clustered_holder <- clustered_holder[c(16:22,6:14,27,34:35,23:24,28:33,36,25:26,15,38,2:5,37,1)]
+confusion_martix_hold <- confusion_martix_hold[clustered_holder,]
+
+# reorder mathys
+clustered_holder <- clustered_holder[c(4:12,3,2,1,37:41,33:36,25:27,42:44,28:30,15:16,20:22,31:32,13,23,14,17,24,19,18)]
+confusion_martix_hold <- confusion_martix_hold[clustered_holder,]
+
+pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+
+### save confusion matrix
 confusion_martix_hold_Cain <- confusion_martix_hold
 confusion_martix_hold_Cain_filt <- confusion_martix_hold
+confusion_martix_hold_Cain_ordered <- confusion_martix_hold
 confusion_martix_hold_Mathys <- confusion_martix_hold
 confusion_martix_hold_Mathys_filt <- confusion_martix_hold
+confusion_martix_hold_Mathys_ordered <- confusion_martix_hold
 
-confusion_martix_hold <- confusion_martix_hold_Cain
-confusion_martix_hold_filt <- confusion_martix_hold_Cain_filt
-confusion_martix_hold <- confusion_martix_hold_Mathys
-confusion_martix_hold_filt <- confusion_martix_hold_Mathys_filt
+### plot in ggplot
+
+confusion_matrix_hold <- confusion_martix_hold_Cain_ordered
+melted_conf_mtx <- melt(t(confusion_martix_hold_Cain_ordered[nrow(confusion_martix_hold_Cain_ordered):1,]))
+melted_conf_mtx <- melt(t(confusion_martix_hold_Mathys_ordered[nrow(confusion_martix_hold_Mathys_ordered):1,]))
+melted_conf_mtx <- melt(t(confusion_martix_hold[nrow(confusion_martix_hold):1,]))
+ggplot(melted_conf_mtx, aes(Var1,Var2, fill=value)) + 
+  geom_raster() +
+  scale_fill_gradientn(colours = brewer.pal(9 ,"Blues")) +
+  theme_classic() +
+  xlab("Mapped subclass") + 
+  ylab("Original cell grouping") +
+  labs(fill = "% of pre- \n mapping \n cell group")
+  theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank())
+
+### export plot (most recently plotted)
+
+ggsave(width = 180, 
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Heatmap/",
+       filename = "Mathys_mapping.pdf",
+       device = "pdf")
+
+#confusion_martix_hold <- confusion_martix_hold_Cain
+#confusion_martix_hold <- confusion_martix_hold_Cain_filt
+#confusion_martix_hold <- confusion_martix_hold_Mathys
+#confusion_martix_hold <- confusion_martix_hold_Mathys_filt
 
 
 #confusion_martix_hold_man <- confusion_martix_hold[,c(2,8,9,1,3,15,4,12,16,5,6,7,13,10,11,14)]
