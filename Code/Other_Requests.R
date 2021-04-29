@@ -1055,9 +1055,33 @@ table(Result_df_MTGandCgG[, c("cluster", "has_ensembl")])
 ### clean and/or export
 
 Result_df_MTGandCgG_final <- Result_df_MTGandCgG[, c(1:3,20,22:23,21,5,7,13,17,4,24)]
-colnames(Result_df_MTGandCgG_final)[c(4,8:11)] <- c("subclass", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
 
-write.csv(Result_df_MTGandCgG_final, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTGnCgG_lfct2.5_results.csv") #save/export results
+### Micaela's list overlap
+humanMarkersCommon <- readRDS("~/git/MarkerSelection/Data/Inputs/humanMarkersCommon.rds")
+humanMarkersCommon <- unique(unname(unlist(humanMarkersCommon)))
+Result_df_MTGandCgG_final$Mic_Overlap <- Result_df_MTGandCgG_final$gene %in% humanMarkersCommon
+###
+
+colnames(Result_df_MTGandCgG_final)[c(4,8:11,14)] <- c("subclass", "roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj", "hMC_overlap") #rename some columns for clarity
+
+write.csv(Result_df_MTGandCgG_final[,c(1:11,14)], "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/MTG_and_CgG_lfct2/new_MTGnCgG_lfct2.5_results.csv") #save/export results
+
+write.csv(Result_df_MTGandCgG_final, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/") #save/export results
+
+#### Check for overlap between 2.5 cutoff markers and common gene from Micaela ####
+
+humanMarkersCommon <- readRDS("~/git/MarkerSelection/Data/Inputs/humanMarkersCommon.rds")
+humanMarkersCommon <- unique(unname(unlist(humanMarkersCommon)))
+
+Result_df_MTGandCgG_final$Mic_Overlap <- Result_df_MTGandCgG_final$gene %in% humanMarkersCommon
+Marker_overlap_holder <- data.frame(unclass(table(Result_df_MTGandCgG_final$subclass, Result_df_MTGandCgG_final$Mic_Overlap)))
+
+names(Marker_overlap_holder) <- c("Not_in_list", "In_list")
+Marker_overlap_holder$Total_n_markers <- Marker_overlap_holder$Not_in_list + Marker_overlap_holder$In_list
+
+Marker_overlap_holder <- Marker_overlap_holder[,c(3,2,1)]
+
+write.csv(Marker_overlap_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Validation/MTGnGgG_Lfct2.5_common_overlap.csv") #save/export results
 
 #### CgG and MTG only 2.0 lfct ####
 
