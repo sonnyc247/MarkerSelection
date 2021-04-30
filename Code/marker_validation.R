@@ -225,26 +225,34 @@ confusion_matrix_hold <- confusion_martix_hold_Cain_ordered
 melted_conf_mtx <- melt(t(confusion_martix_hold_Cain_ordered[nrow(confusion_martix_hold_Cain_ordered):1,]))
 melted_conf_mtx <- melt(t(confusion_martix_hold_Mathys_ordered[nrow(confusion_martix_hold_Mathys_ordered):1,]))
 melted_conf_mtx <- melt(t(confusion_martix_hold[nrow(confusion_martix_hold):1,]))
-ggplot(melted_conf_mtx, aes(Var1,Var2, fill=value)) + 
+
+ggplot(melted_conf_mtx[melted_conf_mtx$Var2 != "None.NA",], aes(Var1,Var2, fill=value)) + 
   geom_raster() +
   scale_fill_gradientn(colours = brewer.pal(9 ,"Blues")) +
   theme_classic() +
   xlab("Mapped subclass") + 
-  ylab("Original cell grouping") +
-  labs(fill = "% of pre- \n mapping \n cell group")
+  ylab("Pre-mapping cell group") +
+  labs(fill = "% of pre- \n mapping \n cell group") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.4, hjust = 1),
+        axis.title.y =  element_text(margin = margin(t = 0, r = 5, b = 0, l = 0))) +
   theme(panel.grid = element_blank(),
         panel.border = element_blank(),
         panel.spacing = element_blank(),
-        panel.background = element_blank())
+        panel.background = element_blank()) +
+  theme(legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,-10),
+        axis.line.y = element_blank(),
+        axis.line.x = element_blank()) 
 
 ### export plot (most recently plotted)
 
 ggsave(width = 180, 
+       height = 210,
        dpi = 300, 
        units = "mm", 
        limitsize = F,
        path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Heatmap/",
-       filename = "Mathys_mapping.pdf",
+       filename = "Cain_mapping_conf_mtx_h210.pdf",
        device = "pdf")
 
 #confusion_martix_hold <- confusion_martix_hold_Cain
