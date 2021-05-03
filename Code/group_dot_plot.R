@@ -33,7 +33,7 @@ gdp_anno$subclass_color <- "white"
 # set which genes to plot
 
 group_to_gdp <- "IT"
-gdp_markers <- Result_df_MTGandCgG_lfct2.0[Result_df_MTGandCgG_lfct2.0$subclass == group_to_gdp, "gene"] #get markers 
+gdp_markers <- new_MTGnCgG_lfct2_results[new_MTGnCgG_lfct2_results$subclass == group_to_gdp, "gene"] #get markers 
 gdp_markers <- intersect(gdp_markers, colnames(gdp_data))
 gdp_markers <- sort(gdp_markers[!is.na(gdp_markers)]) #remove NA, sort alphabetically
 

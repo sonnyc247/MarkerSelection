@@ -17,12 +17,15 @@ library(reshape2)
 
 Seu_test_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
 Seu_test_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_test_object <- subset(Seu_test_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
 Seu_test_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
 Seu_test_object <- subset(Seu_test_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
 
 names(Seu_test_object@meta.data)
 Idents(Seu_test_object) <- "predicted.id"
 table(Idents(Seu_test_object))
+
+Result_df_MTGandCgG_lfct2.0 <- new_MTGnCgG_lfct2_results[,2:12]
 
 marker_list <- intersect(Result_df_MTGandCgG_lfct2.0$gene, row.names(Seu_test_object))
 
@@ -53,9 +56,10 @@ Result_df_MTGandCgG_lfct2.0[Result_df_MTGandCgG_lfct2.0$gene %in% validation_res
 Result_df_MTGandCgG_lfct2.0$In_Cain <- FALSE
 Result_df_MTGandCgG_lfct2.0[Result_df_MTGandCgG_lfct2.0$gene %in% validation_results_Cain$gene, "In_Cain"] <- TRUE
 
-
 Result_df_MTGandCgG_lfct2.0$In_Zhou <- FALSE
 Result_df_MTGandCgG_lfct2.0[Result_df_MTGandCgG_lfct2.0$gene %in% validation_results_Zhou$gene, "In_Zhou"] <- TRUE
+
+Result_df_MTGandCgG_lfct2.0$group_gene <- paste0(Result_df_MTGandCgG_lfct2.0$subclass, "_", Result_df_MTGandCgG_lfct2.0$gene)
 
 intersect(Result_df_MTGandCgG_lfct2.0[Result_df_MTGandCgG_lfct2.0$In_Mathys == TRUE, "group_gene"],
           validation_results_Mathys$group_gene) %>% length()
