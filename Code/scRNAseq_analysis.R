@@ -6,6 +6,9 @@ library(dplyr)
 library(ggplot2)
 library(readr)
 library(magrittr)
+library(RColorBrewer)
+library(reshape2)
+library(cowplot)
 
 #### Data loading - Cain et al ####
 
@@ -105,7 +108,7 @@ length(intersect(VariableFeatures(new_Seu_AIBS_obj), tanchors@anchor.features))
 
        
 
-#### Proportion analysis (a la Shreejoy) - Cain et al ####
+#### Proportion analysis - Cain et al ####
 
 # edit some metadata for groups
 
@@ -286,7 +289,7 @@ Seu_zhou_obj <- AddMetaData(Seu_zhou_obj, metadata = predictions)
 
 length(intersect(VariableFeatures(Seu_zhou_obj), tanchors@anchor.features))
 
-#### Proportion analysis (a la Shreejoy) - Zhou et al ####
+#### Proportion analysis - Zhou et al ####
 
 # subset for QC reason (don't want too few or too many genes detected)
 Seu_zhou_obj_QCed <- subset(Seu_zhou_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500)
@@ -366,14 +369,14 @@ export_holder <- zhou_cell_prop_meta_long[,c(9,10,1,8,2:6,7,11:25)]
 colnames(export_holder)[c(3,5,7:10)] <- c("Sample_ID_from_files", "total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error", "Assumed_grouping_from_ID")
 write.csv(export_holder, "Zhou_cell_type_prop_df.csv")
 
-#### Proportion analysis (a la Shreejoy) - Mathys et al ####
+#### Proportion analysis - Mathys et al ####
 
 # pull metadata with subclass annotations into data frame
 mathys_meta_df <- Seu_mathys_obj@meta.data %>% as.data.frame()
 mathys_meta_df <- mathys_meta_df %>% rename(subclass = predicted.id)
 
 # read in rosmap metadata from dan's lab folder
-ros_meta = readRDS("/external/rprshnas01/public_datasets2/rosmap/phenotype/ROSmaster.rds")
+ros_meta = readRDS("/external/rprshnas01/external_data/rosmap/phenotype/ROSmaster.rds")
 
 # select just the columns from ros master that we need
 ros_meta_small = ros_meta %>% select(projid, pathoAD, gpath, age_death, msex)
@@ -655,6 +658,395 @@ export_holder <- cell_prop_meta_long
 colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
 write.csv(export_holder, "cain_cell_type_prop_df_noNA.csv")
 
+
+
+#### Revisited mapping (CgG only) ####
+
+# load objects
+Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/new_Seu_AIBS_obj.rds")
+
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+#prep work
+unique(Seu_ref_object$outlier_call)
+table(Seu_ref_object$NeuN_Region)
+Seu_ref_object
+Seu_ref_object <- subset(Seu_ref_object, subset = NeuN_Region == "MTG_Neuronal", invert = TRUE)
+table(Seu_ref_object$NeuN_Region)
+Seu_ref_object
+
+Idents(Seu_ref_object) <- "subclass_label" #so that we're mapping at the subclass level
+Seu_ref_object <- FindVariableFeatures(Seu_ref_object, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferring
+table(Idents(Seu_ref_object))
+
+Seu_map_object <- FindVariableFeatures(Seu_map_object, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferrin
+
+length(intersect(VariableFeatures(Seu_map_object), VariableFeatures(Seu_ref_object)))
+length(intersect(VariableFeatures(Seu_map_object), rownames(Seu_ref_object)))
+length(intersect(rownames(Seu_map_object), VariableFeatures(Seu_ref_object)))
+
+#transfer
+tanchors <- FindTransferAnchors(reference = Seu_ref_object, query = Seu_map_object, dims = 1:30)
+predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label, dims = 1:30)
+
+#### Revisited mapping (M1 AIBS data) ####
+
+# make and prep M1 object
+
+metadata <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/Bakken_et_al_2020/metadata.csv")
+matrix <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/Bakken_et_al_2020/matrix.csv")
+
+row.names(metadata) <- metadata$sample_name
+row.names(matrix) <- matrix$sample_name
+count_matrix <- matrix[,-1]
+remove(matrix)
+
+Seu_M1AIBS_obj <- CreateSeuratObject(counts = t(count_matrix), meta.data = metadata)
+
+test <- Seu_M1AIBS_obj@meta.data #check that seurat object was created properly - with metadata
+identical(metadata, test[,4:42])
+remove(test)
+identical(table(Seu_M1AIBS_obj$subclass_label), table(metadata$subclass_label))
+remove(metadata)
+
+test <- Seu_M1AIBS_obj[["RNA"]]@counts #check counts in Seurat object too
+test <- as.data.frame(test[1:100,1:100])
+test2 <- count_matrix[1:100,1:100]
+test2 <- t(test2)
+test2 <- as.data.frame(test2)
+identical(rownames(test), rownames(test2))
+test2 <- sapply(test2, as.numeric)
+test2 <- as.data.frame(test2)
+rownames(test2) <- rownames(test)
+identical(test2, test)
+remove(test)
+remove(test2)
+remove(count_matrix)
+
+# normalize data
+
+Seu_M1AIBS_obj <- NormalizeData(Seu_M1AIBS_obj, normalization.method = "LogNormalize", scale.factor = 1000000) #preprocess/normalize seurat object
+Seu_M1AIBS_obj[["RNA"]]@data[1:20,1:40] #see normalized data
+Seu_M1AIBS_obj[["RNA"]]@counts[1:20,1:40] #see counts for comparison
+
+# check for outliers and other metrics
+
+table(Seu_M1AIBS_obj$outlier_call, Seu_M1AIBS_obj$outlier_type, exclude = NULL)
+table(Seu_M1AIBS_obj$region_label)
+Idents(Seu_M1AIBS_obj) <- "subclass_label" #so that we're mapping/working at the subclass level
+table(Idents(Seu_M1AIBS_obj))
+table(Seu_M1AIBS_obj$subclass_label)
+
+# find variable features
+
+head(Idents(Seu_M1AIBS_obj)) #check that we're mapping at/using the subclass level - in case it affects variable features (it probably doesn't)
+Seu_M1AIBS_obj <- FindVariableFeatures(Seu_M1AIBS_obj, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferring
+length(Seu_M1AIBS_obj@assays$RNA@var.features)
+
+# save Seu object as rds
+
+saveRDS(Seu_M1AIBS_obj, "~/git/Ex_Env_Storage/MarkerSelection/Seu_M1AIBS_obj.rds")
+
+# load Seu objects
+
+Seu_ref_object <- Seu_M1AIBS_obj
+remove(Seu_M1AIBS_obj)
+Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_M1AIBS_obj.rds")
+
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+# prep as needed
+
+Seu_ref_object <- FindVariableFeatures(Seu_ref_object, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferring
+length(Seu_ref_object@assays$RNA@var.features) #check
+Idents(Seu_ref_object) <- "subclass_label" #so that we're mapping at the subclass level
+table(Idents(Seu_ref_object))
+
+test <- Seu_map_object@assays$RNA@var.features
+Seu_map_object <- FindVariableFeatures(Seu_map_object, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferrin
+test2 <- Seu_map_object@assays$RNA@var.features
+identical(test, test2)
+remove(test)
+remove(test2)
+
+length(intersect(VariableFeatures(Seu_map_object), VariableFeatures(Seu_ref_object)))
+length(intersect(VariableFeatures(Seu_map_object), rownames(Seu_ref_object)))
+length(intersect(rownames(Seu_map_object), VariableFeatures(Seu_ref_object)))
+
+#transfer
+tanchors <- FindTransferAnchors(reference = Seu_ref_object, query = Seu_map_object, dims = 1:30)
+predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label, dims = 1:30)
+
+
+
+Seu_zhou_obj <- AddMetaData(Seu_zhou_obj, metadata = predictions)
+
+length(intersect(VariableFeatures(Seu_zhou_obj), tanchors@anchor.features))
+
+# export df for plotting
+
+export_holder <- cell_prop_meta_long
+colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+write.csv(export_holder, "cain_cell_type_prop_df_noNA.csv")
+
+#### Confusion matrix cgg vs m1 ####
+
+# qc thresh cut for IT cells
+
+ncol(Seu_plot_object)
+table(Seu_plot_object$predicted.id)
+Seu_plot_object <- subset(Seu_plot_object, subset = predicted.id == "IT" & prediction.score.max < 0.8, invert = T) 
+table(Seu_plot_object$predicted.id)
+
+# get numbers for confusion matrix
+
+df_for_CgGvM1_plot <- merge(predictions_Zhou_CgG, predictions_Zhou_M1, by = "row.names")
+df_for_CgGvM1_plot <- merge(predictions_Mathys_CgG[!(predictions_Mathys_CgG$prediction.score.max < 0.8
+                                                 & predictions_Mathys_CgG$predicted.id == "IT"),], 
+                                                 predictions_Mathys_M1, 
+                                                 by = "row.names",
+                                                 all.x = T,
+                                                 all.y = F)
+
+confusion_martix_hold <- as.matrix(table(df_for_CgGvM1_plot$predicted.id.y, df_for_CgGvM1_plot$predicted.id.x)) 
+confusion_martix_hold <- as.matrix(confusion_martix_hold)
+confusion_martix_hold <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
+
+# plot heatmap
+
+display.brewer.all()
+dev.off() #as needed to reset graphics
+
+#heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
+
+pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+#pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+
+### plot in ggplot
+
+melted_conf_mtx <- melt(t(confusion_martix_hold[nrow(confusion_martix_hold):1,]))
+
+mathys_M1pct <- ggplot(melted_conf_mtx, aes(Var1,Var2, fill=value)) + 
+  geom_raster() +
+  scale_fill_gradientn(colours = brewer.pal(9 ,"Blues")) +
+  theme_classic() +
+  xlab("CgG-mapped subclass") + 
+  ylab("M1-mapped subclass") +
+  labs(fill = "% of M1- \n mapped cells") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.4, hjust = 1),
+        axis.title.y =  element_text(margin = margin(t = 0, r = 5, b = 0, l = 0))) +
+  theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank()) +
+  theme(legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,-10),
+        axis.line.y = element_blank(),
+        axis.line.x = element_blank()) 
+
+plot_grid(mathys_M1pct,
+          cain_M1pct,
+          zhou_M1pct,
+          labels = c("Mathys", "Cain", "Zhou"),
+          label_size = 10,
+          hjust = -0.15,
+          align = "hv",
+          ncol = 1)
+
+### export plot (most recently plotted)
+
+ggsave(width = 180,
+       height = 400,
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Heatmap/",
+       filename = "CgGvsM1_M1pct_IT8filter.pdf",
+       device = "pdf")
+
+#### Confusion matrix original vs m1 ####
+
+# load data
+
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+
+# get numbers for confusion matrix
+
+metadata_for_plot <- Seu_map_object@meta.data
+
+metadata_for_plot <- metadata_for_plot[,c("nCount_RNA", "nFeature_RNA", "Subcluster")] # for Mathys
+identical(rownames(metadata_for_plot), rownames(predictions_Mathys_M1))
+df_for_CgGvM1_plot <- merge(metadata_for_plot, predictions_Mathys_M1, by = "row.names")
+
+table(metadata_for_plot$subtype) # for Cain
+metadata_for_plot <- metadata_for_plot[,c("nCount_RNA", "nFeature_RNA", "subtype")] 
+identical(rownames(metadata_for_plot), rownames(predictions_Cain_M1))
+df_for_CgGvM1_plot <- merge(metadata_for_plot, predictions_Cain_M1, by = "row.names")
+df_for_CgGvM1_plot <- merge(predictions_Cain_M1[!(predictions_Cain_M1$prediction.score.max < 0.8
+                                                & predictions_Cain_M1$predicted.id == "L2/3 IT"),], 
+                            metadata_for_plot, 
+                            by = "row.names",
+                            all.x = T,
+                            all.y = F)
+
+
+confusion_martix_hold <- as.matrix(table(df_for_CgGvM1_plot$Subcluster, df_for_CgGvM1_plot$predicted.id)) # for mathys 
+confusion_martix_hold <- as.matrix(table(df_for_CgGvM1_plot$subtype, df_for_CgGvM1_plot$predicted.id)) # for cain 
+confusion_martix_hold <- as.matrix(confusion_martix_hold)
+confusion_martix_hold <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
+
+# plot heatmap
+
+display.brewer.all()
+dev.off() #as needed to reset graphics
+
+#heatmap(confusion_martix_hold, col=brewer.pal(9 ,"Blues"), Rowv=TRUE, Colv=TRUE)
+
+pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+#pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+
+### plot in ggplot
+
+melted_conf_mtx <- melt(t(confusion_martix_hold[nrow(confusion_martix_hold):1,]))
+
+cain_M1pct_08 <- ggplot(melted_conf_mtx, aes(Var1,Var2, fill=value)) + 
+  geom_raster() +
+  scale_fill_gradientn(colours = brewer.pal(9 ,"Blues")) +
+  theme_classic() +
+  xlab("Mapped subclass") + 
+  ylab("Pre-mapping cell group") +
+  labs(fill = "% of pre- \n mapping \n cell group") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.4, hjust = 1),
+        axis.title.y =  element_text(margin = margin(t = 0, r = 5, b = 0, l = 0))) +
+  theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank()) +
+  theme(legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,-10),
+        axis.line.y = element_blank(),
+        axis.line.x = element_blank()) 
+
+plot_grid(mathys_M1pct,
+          cain_M1pct,
+          cain_M1pct_08,
+          labels = c("Mathys", "Cain", "Cain L2/3 IT Filter .8"),
+          label_size = 10,
+          hjust = -0.15,
+          align = "hv",
+          ncol = 1)
+
+### export plot (most recently plotted)
+
+ggsave(width = 180,
+       height = 550,
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Heatmap/",
+       filename = "OrigvsM1.pdf",
+       device = "pdf")
+
+#### Proportion analysis revisited - All datasets - M1, CgG, unfiltered, filtered ####
+
+### takes place after updating the saved seurat object in "Z9_updating_seurat_objects.R" 
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_22MAY21.rds")
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_22MAY21.rds") #load cain seurat object (instead)
+Seu_prop_obj <- subset(Seu_prop_obj, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_22MAY21.rds") #load zhou seurat object (instead)
+Seu_prop_obj <- subset(Seu_prop_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+# pull metadata with subclass annotations into data frame
+meta_df <- Seu_prop_obj@meta.data %>% as.data.frame()
+remove(Seu_prop_obj)
+meta_df_backup <- meta_df
+meta_df <- meta_df_backup
+meta_df <- meta_df[!(meta_df$predicted.id.CgG == "IT" & meta_df$prediction.score.max.CgG < 0.8),] # as appropriate
+meta_df <- meta_df[!(meta_df$predicted.id.M1 == "L2/3 IT" & meta_df$prediction.score.max.M1 < 0.8),] # as appropriate
+meta_df <- meta_df %>% rename(subclass = predicted.id.CgG) # as appropriate
+meta_df <- meta_df %>% rename(subclass = predicted.id.M1) # as appropriate
+
+# count up cell counts per subclass and total per subject
+cell_type_counts_initial <- meta_df %>% group_by(projid, subclass) %>% summarize(cell_type_count = n())
+
+cell_type_counts <- as.data.frame(table(cell_type_counts_initial$projid, cell_type_counts_initial$subclass))
+cell_type_counts$bridger <- paste0(cell_type_counts$Var1, "_", cell_type_counts$Var2)
+cell_type_counts_initial$bridger <- paste0(cell_type_counts_initial$projid, "_", cell_type_counts_initial$subclass)
+cell_type_counts <- merge(cell_type_counts[,-3], cell_type_counts_initial[,3:4], by = "bridger", all.x = T, all.y = T)
+cell_type_counts <- cell_type_counts[,2:4]
+colnames(cell_type_counts)[1:2] <- c("projid", "subclass")
+cell_type_counts$cell_type_count[is.na(cell_type_counts$cell_type_count)] <- 0
+
+tot_cell_counts <- meta_df %>% group_by(projid) %>% summarize(tot_cell_counts = n())
+
+table(meta_df$subclass, meta_df$projid)
+
+# calculate cell proportions and standard errors per subclass per subject
+cell_prop_df <- merge(tot_cell_counts, cell_type_counts) %>% 
+  mutate(cell_type_prop <- cell_type_count / tot_cell_counts, 
+         cell_type_prop_se <- sqrt((cell_type_prop * (1 - cell_type_prop))/tot_cell_counts))
+
+names(cell_prop_df)[5] <- "cell_type_prop"
+names(cell_prop_df)[6] <- "cell_type_prop_se"
+
+# merge cell proportions with subject level meta
+cell_prop_meta_long <- merge(cell_prop_df, unique(meta_df[,c("projid", "age_death_Update_22MAY21", "msex_Update_22MAY21", "pmi_Update_22MAY21", "LOAD_Update_22MAY21")]), by = "projid")
+colnames(cell_prop_meta_long)[7:10] <- c("age_death", "msex", "pmi", "LOAD")
+
+cell_prop_meta_long %>% 
+  filter(subclass == "SST") %>% 
+  group_by(LOAD, subclass) %>% 
+  summarize(m = mean(cell_type_prop))
+
+# plot
+
+ggplot(cell_prop_meta_long, aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  facet_wrap(~ subclass, scales = "free") +
+  xlab('Cell types') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+ggplot(cell_prop_meta_long[cell_prop_meta_long$subclass == "SST",], aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot(aes(middle = mean(cell_type_prop))) +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  xlab('AD Group') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+table(cell_prop_meta_long$subclass, cell_prop_meta_long$LOAD)
+
+# export df for plotting
+
+export_holder <- cell_prop_meta_long
+colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/CgG_Unfiltered/zhou_cell_type_prop_df.csv")
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/M1_Unfiltered/zhou_cell_type_prop_df.csv")
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/CgG_Filtered/zhou_cell_type_prop_df.csv")
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/M1_Filtered/zhou_cell_type_prop_df.csv")
+
+
+#
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
 mathys_cell_prop_meta_long %>% ggplot(aes(x = gpath, y = cell_type_prop, color = pathoAD, group = 1)) + 
