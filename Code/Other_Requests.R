@@ -250,6 +250,111 @@ colnames(Result_df)[c(3:11)] <- c("ensembl_id", "class", "pct.1", "pct.2", "avg_
 new_MTG_results_NeuNonN <- Result_df #store the results in R
 write.csv(new_MTG_results_NeuNonN, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/new_MTG_results_NeuNonN.csv") #save/export results
 
+#### get markers from all of hodge with new IT groups ####
+
+### initial setup
+
+library(Seurat)
+library(MAST)
+library(dplyr)
+
+Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj.rds")
+table(Seu_AIBS_obj$outlier_call, exclude = "ifany") #check for outliers
+table(Seu_AIBS_obj$NeuN_Region) #check our data composition
+
+### make new IT groups
+
+Seu_AIBS_obj$subclass_label_expanded <- Seu_AIBS_obj$subclass_label #make new variable, starting from subclasses
+
+Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %in% c("Neuron 062",
+                                                                                     "Neuron 063",
+                                                                                     "Neuron 064",
+                                                                                     "Neuron 065",
+                                                                                     "Neuron 066",
+                                                                                     "Neuron 067",
+                                                                                     "Neuron 068",
+                                                                                     "Neuron 069",
+                                                                                     "Neuron 070",
+                                                                                     "Neuron 071",
+                                                                                     "Neuron 072")] <- "L2/3 IT" #set L2/3 IT
+
+Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %in% c("Neuron 073",
+                                                                                     "Neuron 074",
+                                                                                     "Neuron 075",
+                                                                                     "Neuron 076")] <- "L6 IT" #set L6 IT
+
+Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %in% c("Neuron 079",
+                                                                                     "Neuron 080",
+                                                                                     "Neuron 081",
+                                                                                     "Neuron 082",
+                                                                                     "Neuron 083",
+                                                                                     "Neuron 084",
+                                                                                     "Neuron 085",
+                                                                                     "Neuron 086",
+                                                                                     "Neuron 087")] <- "L5 IT" #set L5 IT
+
+Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %in% c("Neuron 077",
+                                                                                     "Neuron 078")] <- "Other IT" #set Leftover IT
+
+table(Seu_AIBS_obj$subclass_label_expanded)
+Idents(Seu_AIBS_obj) <- "subclass_label_expanded"
+table(Idents(Seu_AIBS_obj)) #double check what subclasses we have and that they're set as active identity
+
+### subset as needed ###
+
+Idents(Seu_AIBS_obj) <- "NeuN_Region" #we identify samples by "NeuN_Region", which we made befire in 1_Loading_and_selecting_data.Rmd
+Seu_AIBS_obj <- subset(Seu_AIBS_obj, subset = NeuN_Region %in% c("MTG_Neuronal", 
+                                                                 "V1C_Neuronal", 
+                                                                 "M1lm_Neuronal", 
+                                                                 "S1ul_Neuronal", 
+                                                                 "S1lm_Neuronal", 
+                                                                 "M1ul_Neuronal", 
+                                                                 "A1C_Neuronal"), invert = TRUE) #remove all non-CgG neurons
+
+table(Seu_AIBS_obj$subclass_label_expanded) #double check what subclasses we have
+Seu_AIBS_obj <- subset(Seu_AIBS_obj, subset = subclass_label_expanded == "L4 IT", invert = TRUE) #remove L4 IT for n = 1
+
+### find markers
+
+Idents(Seu_AIBS_obj) <- "subclass_label_expanded" #assign proper labels
+
+new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### remove duplicates
+
+dup_list <- unique(new_AIBS_markers_mast_expIT_ALL[duplicated(new_AIBS_markers_mast_expIT_ALL$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_expIT_ALL <- new_AIBS_markers_mast_expIT_ALL[!(new_AIBS_markers_mast_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
+
+dup_list <- unique(new_AIBS_markers_roc_expIT_ALL[duplicated(new_AIBS_markers_roc_expIT_ALL$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_expIT_ALL <- new_AIBS_markers_roc_expIT_ALL[!(new_AIBS_markers_roc_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
+
+remove(dup_list) #clean temporary object
+
+### finalize df
+
+length(intersect(new_AIBS_markers_mast_expIT_ALL$gene, new_AIBS_markers_roc_expIT_ALL$gene)) #see intersect of marker genes
+Result_df <- merge(new_AIBS_markers_roc_expIT_ALL, new_AIBS_markers_mast_expIT_ALL, by = "gene", all.x = TRUE, all.y = TRUE) #combine the marker df; may want to double check the indices/order
+
+test <- Result_df[complete.cases(Result_df),]
+identical(test$avg_log2FC.x, test$avg_log2FC.y)
+identical(test$pct.1.x, test$pct.1.y)
+identical(test$pct.2.x, test$pct.2.y)
+identical(test$cluster.x, test$cluster.y)
+remove(test)
+
+Result_df <- Result_df %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df <- Result_df %>% mutate(avg_log2FC = coalesce(avg_log2FC.x, avg_log2FC.y))
+Result_df <- Result_df %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df <- Result_df %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+Result_df <- Result_df[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "avg_diff", "myAUC", "power", "p_val", "p_val_adj")]
+
+Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/CgG/new_CgG_results_ITexpand_lfct2.csv") #save/export results
+
+#
 #### get celltype markers from Mathys ####
 
 # prep metadata
@@ -1367,3 +1472,91 @@ colnames(Bad_marker_pct_combined) <- c("Subclass", "n_Bad_markers_lfct2", "n_Goo
                                        "n_Bad_markers_lfct2.5", "n_Good_markers_lfct2.5", "n_Total_markers_lfct2.5", "pct_Good_markers_lfct2.5", "Pct2.5_minus_Pct2.0")
 
 write.csv(Bad_marker_pct_combined, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Validation/Mathys_lfct_good_marker_pct.csv") #save/export results
+
+#### Boxplots for Dan's rosmap presentation ####
+
+library(Seurat)
+library(ggplot2)
+library(cowplot)
+
+### load objects
+
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/new_Seu_AIBS_obj.rds")
+table(Seu_plot_object$NeuN_Region)
+Seu_plot_object <- subset(Seu_plot_object, subset = NeuN_Region == "MTG_Neuronal", invert = TRUE)
+
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_22MAY21.rds") #load mathys seurat object
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_22MAY21.rds") #load cain seurat object (instead)
+Seu_plot_object <- subset(Seu_plot_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+Seu_plot_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_22MAY21.rds") #load zhou seurat object (instead)
+Seu_plot_object <- subset(Seu_plot_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+### get metadata
+
+metadata_for_plot <- Seu_plot_object@meta.data
+metadata_for_plot <- tibble::rownames_to_column(metadata_for_plot)
+
+# for hodge
+metadata_for_plot <- metadata_for_plot[, c("rowname", "nFeature_RNA", "subclass_label")] 
+colnames(metadata_for_plot)[3] <- "subclass"
+metadata_for_plot$Dataset <- "Hodge"
+
+# for snDatasets
+metadata_for_plot <- metadata_for_plot[, c("rowname", "nFeature_RNA", "predicted.id.CgG")] 
+colnames(metadata_for_plot)[3] <- "subclass"
+metadata_for_plot$Dataset <- "Zhou" #as appropriate
+
+#metadata_for_plot_combined <- metadata_for_plot # first time
+metadata_for_plot_combined <- rbind(metadata_for_plot_combined, metadata_for_plot)
+
+table(metadata_for_plot_combined$Dataset)
+
+# plot
+
+metadata_for_plot_combined$Dataset_backup <- metadata_for_plot_combined$Dataset
+metadata_for_plot_combined$Dataset <- factor(metadata_for_plot_combined$Dataset, levels=c("Hodge", "Mathys", "Cain", "Zhou"), ordered=TRUE)
+
+all_plots <- ggplot(metadata_for_plot_combined, aes(Dataset, nFeature_RNA)) +
+  geom_boxplot(outlier.size = 1, outlier.alpha = 0.5) +
+  theme_classic() +
+  labs(y = "Number of detected genes")
+
+SST_plots <- ggplot(metadata_for_plot_combined[metadata_for_plot_combined$subclass == "SST",], aes(Dataset, nFeature_RNA)) +
+  geom_boxplot(outlier.size = 1, outlier.alpha = 0.5) +
+  theme_classic() +
+  labs(y = "Number of detected genes")
+
+plot_grid(all_plots,
+          SST_plots,
+          labels = c("All subclasses", "SST subclasss cells"),
+          label_size = 10,
+          hjust = -0.15,
+          align = "hv",
+          ncol = 1)
+
+SST_holder <- metadata_for_plot_combined[metadata_for_plot_combined$subclass == "SST",]
+metadata_for_plot_combined$Plot <- "All subclasses"
+SST_holder$Plot <- "SST cells"
+metadata_for_plot_dup <- rbind(metadata_for_plot_combined, SST_holder)
+
+metadata_for_plot_dup$tech <- "10X Genomics"
+metadata_for_plot_dup[metadata_for_plot_dup$Dataset == "Hodge", "tech"] <- "SMART-seq"
+metadata_for_plot_dup$tech <- factor(metadata_for_plot_dup$tech, levels=c("SMART-seq", "10X Genomics"), ordered=TRUE)
+
+ggplot(metadata_for_plot_dup, aes(Dataset, nFeature_RNA, fill = tech)) +
+  geom_boxplot(outlier.size = 1, outlier.alpha = 0.5) +
+  scale_fill_manual(values = c("cyan", "white")) +
+  theme_classic() +
+  theme(legend.margin=margin(0, 0, 0, -10),
+        axis.title.y=element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
+        axis.title.x=element_text(margin = margin(t = 5, r = 0, b = 0, l = 0))) +
+  labs(y = "Number of detected genes", fill = "Sequencing \ntechnology") +
+  facet_wrap(~Plot)
+
+ggsave(width = 180,
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Misc/",
+       filename = "Genetech_Boxplots.pdf",
+       device = "pdf")

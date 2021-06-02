@@ -9,7 +9,10 @@ library(magrittr)
 library(RColorBrewer)
 library(reshape2)
 library(cowplot)
+library(ggbeeswarm)
+library(broom)
 
+#
 #### Data loading - Cain et al ####
 
 ### read in data
@@ -1045,6 +1048,457 @@ write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Da
 write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/CgG_Filtered/zhou_cell_type_prop_df.csv")
 write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/M1_Filtered/zhou_cell_type_prop_df.csv")
 
+
+#
+#### lm of MGPs and for rosmap factors ####
+
+### Load the datasets
+
+cain_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/CgG_Unfiltered/cain_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+mathys_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/CgG_Unfiltered/mathys_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+zhou_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/CgG_Unfiltered/zhou_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+
+### adjustments to and combining of imported datasets
+
+cain_cell_type_prop_df$dataset <- "Cain"
+mathys_cell_type_prop_df$dataset <- "Mathys"
+zhou_cell_type_prop_df$dataset <- "Zhou"
+
+identical(colnames(cain_cell_type_prop_df), colnames(mathys_cell_type_prop_df)) #checks before rbind all together
+identical(colnames(cain_cell_type_prop_df), colnames(zhou_cell_type_prop_df)) 
+
+ad_snrnaseq_df = bind_rows(mathys_cell_type_prop_df, zhou_cell_type_prop_df, cain_cell_type_prop_df)
+
+ad_snrnaseq_df$LOAD = factor(ad_snrnaseq_df$LOAD, levels = c('C', 'AD', 'OTHER'))
+ad_snrnaseq_df$dataset = factor(ad_snrnaseq_df$dataset, levels = c('Mathys', 'Zhou', 'Cain'))
+ad_snrnaseq_df$msex = factor(ad_snrnaseq_df$msex)
+str(ad_snrnaseq_df)
+
+### some checks
+
+# tally of individuals by case and dataset
+ad_snrnaseq_df %>% select(projid, dataset, LOAD) %>%
+  distinct(.keep_all = T) %>% group_by(dataset, LOAD) %>% tally()
+
+# plot of data
+ad_snrnaseq_df %>% 
+  filter(subclass == 'Sst', LOAD %in% c('C', 'AD')) %>% 
+  ggplot(aes(x = LOAD, y = cell_type_proportion * 100)) + 
+  geom_boxplot(outlier.shape = NA, ) + 
+  geom_quasirandom() + 
+  facet_wrap(~dataset, scales = 'free_x') + 
+  ylab('SST snCTP (%)') + 
+  xlab('')
+
+### calculate LOAD beta coefficients
+
+# check subclasses and datasets
+cell_type_list <- as.character(unique(ad_snrnaseq_df$subclass))
+table(ad_snrnaseq_df$subclass, ad_snrnaseq_df$dataset)
+
+cell_type_list = cell_type_list[! cell_type_list %in% c('L5/6 IT Car3')] #remove subclasses that are not in all datasets; CgG map
+cell_type_list = cell_type_list[! cell_type_list %in% c('L5 IT', 'L5/6 NP', 'L6 IT', 'L6 IT Car3', 'L6b', 'Sst Chodl', 'VLMC', 'L5 ET')] #remove subclasses that are not in all datasets; M1 map
+
+# check for cases where all counts of a cell type = zero (mean would = exactly 0)
+test <- ad_snrnaseq_df %>% select(cell_type_proportion, projid, subclass, dataset, LOAD) %>% filter(LOAD %in% c('C', 'AD'), subclass %in% cell_type_list) %>%
+  group_by(subclass, dataset, LOAD) %>% summarize(mean_prop = mean(cell_type_proportion, na.rm = TRUE))
+test[test$mean_prop == 0, "subclass"]
+cell_type_list = cell_type_list[! cell_type_list %in% c('L6b')] #remove subclasses that are pure 0 in 1 dataset; CgG map
+remove(test)
+
+# calculate beta coefficients
+
+beta_coefs_non_meta_df = lapply(levels(ad_snrnaseq_df$dataset), function(curr_dataset){
+  print(curr_dataset)
+  
+  dataset_df = lapply(cell_type_list, function(curr_cell_type){
+    print(curr_cell_type)
+    df = ad_snrnaseq_df %>% filter(LOAD %in% c('C', 'AD'))
+    df = df[df$dataset == curr_dataset & df$subclass == curr_cell_type, ]
+    my_model = lm('scale(cell_type_proportion) ~ scale(age_death) + factor(msex) + scale(pmi) + LOAD ',
+                  data = df)
+    model_df = tidy(my_model)
+    model_df$dataset = curr_dataset
+    model_df$subclass = curr_cell_type
+    
+    return(model_df) 
+  }) %>% bind_rows()
+  return(dataset_df)  
+  #beta_out = 
+}) %>% bind_rows()
+
+# for troubleshooting the above function (basically convert the above into for loops):
+
+for (curr_dataset in unique(ad_snrnaseq_df$dataset)) {
+  print(curr_dataset)
+  for (curr_cell_type in cell_type_list){
+    print(curr_cell_type)
+    df = ad_snrnaseq_df %>% filter(LOAD %in% c('C', 'AD'))
+    df = df[df$dataset == curr_dataset & df$subclass == curr_cell_type, ]
+    my_model = lm('scale(cell_type_proportion) ~ scale(age_death) + factor(msex) + scale(pmi) + LOAD ',
+                  data = df)
+    model_df = tidy(my_model)
+    model_df$dataset = curr_dataset
+    model_df$subclass = curr_cell_type
+  }
+  
+}
+
+### Plot results
+
+# sets factor levels to match order we want
+
+beta_coefs_non_meta_df$dataset = factor(beta_coefs_non_meta_df$dataset, levels = c('Mathys', 'Zhou', 'Cain'))
+beta_coefs_non_meta_df = merge(beta_coefs_non_meta_df, subclass_meta, by.x = 'subclass', by.y = 'subclass') #cgg mapping
+Seu_M1AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_M1AIBS_obj.rds")
+subclass_meta_M1 <- unique(Seu_M1AIBS_obj@meta.data[c("subclass_label", "class_label", "class_color")])
+remove(Seu_M1AIBS_obj)
+colnames(subclass_meta_M1)[1:2] <- c("subclass", "class")
+beta_coefs_non_meta_df = merge(beta_coefs_non_meta_df, subclass_meta_M1, by.x = 'subclass', by.y = 'subclass') #M1 mapping
+
+# plots beta coefficients for LOAD across each dataset faceted by cell type
+
+beta_coefs_non_meta_df %>% filter(term == 'LOADAD', class == "Glutamatergic") %>% 
+  ggplot(aes(x = dataset, y = estimate, fill = class_color)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_identity() + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_wrap(~subclass) + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('')
+
+### save results
+
+beta_coefs_non_meta_df$mapping <- "M1"
+beta_coefs_non_meta_df$filtering <- "Filtered"
+
+beta_coefs_non_meta_df_CgG_Unfiltered <- beta_coefs_non_meta_df
+beta_coefs_non_meta_df_CgG_Filtered <- beta_coefs_non_meta_df
+beta_coefs_non_meta_df_M1_Unfiltered <- beta_coefs_non_meta_df
+beta_coefs_non_meta_df_M1_Filtered <- beta_coefs_non_meta_df
+
+### combine results
+
+beta_coefs_non_meta_df_M1_Filtered$subclass <-toupper(beta_coefs_non_meta_df_M1_Filtered$subclass)
+beta_coefs_non_meta_df_M1_Unfiltered$subclass <-toupper(beta_coefs_non_meta_df_M1_Unfiltered$subclass)
+
+identical(colnames(beta_coefs_non_meta_df_CgG_Unfiltered), colnames(beta_coefs_non_meta_df_M1_Unfiltered))
+identical(colnames(beta_coefs_non_meta_df_CgG_Unfiltered), colnames(beta_coefs_non_meta_df_M1_Filtered))
+identical(colnames(beta_coefs_non_meta_df_CgG_Unfiltered), colnames(beta_coefs_non_meta_df_CgG_Filtered))
+
+beta_coefs_non_meta_df_combined = bind_rows(beta_coefs_non_meta_df_CgG_Unfiltered, 
+                                            beta_coefs_non_meta_df_CgG_Filtered,
+                                            beta_coefs_non_meta_df_M1_Unfiltered,
+                                            beta_coefs_non_meta_df_M1_Filtered)
+beta_coefs_non_meta_df_combined[beta_coefs_non_meta_df_combined$class == "Non-neuronal", "class"] <- "Non-Neuronal"
+beta_coefs_non_meta_df_combined$filtering = factor(beta_coefs_non_meta_df_combined$filtering, levels = c('Unfiltered', 'Filtered'))
+
+### combined graph
+
+beta_coefs_non_meta_df_combined %>% filter(term == 'LOADAD', class == "Glutamatergic") %>% 
+  ggplot(aes(x = dataset, y = estimate, fill = class_color)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_identity() + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_grid(subclass ~ mapping*filtering, scales = "free") + 
+  #facet_wrap(~mapping*filtering, scales = "free") + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('')
+
+
+#### Original identity proportion analysis ####
+
+### Load the datasets
+
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_22MAY21.rds")
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_22MAY21.rds") #load cain seurat object (instead)
+Seu_prop_obj <- subset(Seu_prop_obj, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+
+### pull metadata with subclass annotations into data frame; format metadata
+meta_df <- Seu_prop_obj@meta.data %>% as.data.frame()
+remove(Seu_prop_obj)
+names(meta_df)
+
+#for mathys
+meta_df <- meta_df %>% rename(subclass = Subcluster, class = broad.cell.type)
+meta_df <- meta_df %>% select(TAG, projid, class, subclass, age_death_Update_22MAY21, msex_Update_22MAY21, pmi_Update_22MAY21, LOAD_Update_22MAY21)
+names(meta_df)[5:8] <- c("age_death", "msex", "pmi", "LOAD")
+
+#for cain
+meta_df <- meta_df %>% rename(subclass = subtype, class = broad_class)
+meta_df <- meta_df %>% select(cell_name, projid, class, subclass, age_death_Update_22MAY21, msex_Update_22MAY21, pmi_Update_22MAY21, LOAD_Update_22MAY21)
+names(meta_df)[5:8] <- c("age_death", "msex", "pmi", "LOAD")
+    
+### count up cell counts per subclass and total per subject
+cell_type_counts <- as.data.frame(table(meta_df$subclass, meta_df$projid))
+names(cell_type_counts) <- c("subclass", "projid", "cell_type_count")
+tot_cell_counts <- meta_df %>% group_by(projid) %>% summarize(tot_cell_counts = n())
+
+### calculate cell proportions and standard errors per subclass per subject
+cell_prop_df <- merge(tot_cell_counts, cell_type_counts) %>% 
+  mutate(cell_type_prop <- cell_type_count / tot_cell_counts, 
+         cell_type_prop_se <- sqrt((cell_type_prop * (1 - cell_type_prop))/tot_cell_counts))
+
+names(cell_prop_df)[5] <- "cell_type_prop"
+names(cell_prop_df)[6] <- "cell_type_prop_se"
+
+# merge cell proportions with subject level meta
+
+cell_prop_meta_long <- merge(cell_prop_df, unique(meta_df[,c("projid", "age_death", "msex", "pmi", "LOAD")]), by = "projid")
+
+cell_prop_meta_long %>% 
+  filter(subclass == "Inh.Inh.ADARB2.LAMP5.1") %>% 
+  group_by(LOAD, subclass) %>% 
+  summarize(m = mean(cell_type_prop))
+
+### plot
+
+ggplot(cell_prop_meta_long, aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  facet_wrap(~ subclass, scales = "free") +
+  xlab('Cell types') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+ggplot(cell_prop_meta_long[cell_prop_meta_long$subclass == "Inh.Inh.ADARB2.LAMP5.1",], aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot(aes(middle = mean(cell_type_prop))) +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  xlab('AD Group') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+table(cell_prop_meta_long$subclass, cell_prop_meta_long$LOAD)
+
+### export df 
+
+export_holder <- merge(cell_prop_meta_long, unique(meta_df[,c("subclass", "class")]), by = "subclass")
+export_holder <- export_holder[,c(2,3,1,11,4:10)]
+colnames(export_holder)[c(2,5:7)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/Original_Identities/mathys_cell_type_prop_df.csv")
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/Original_Identities/cain_cell_type_prop_df.csv")
+
+mathys_cell_type_prop_df <- export_holder
+cain_cell_type_prop_df <- export_holder
+
+### lm 
+
+### adjustments to and combining of imported datasets
+
+cain_cell_type_prop_df$dataset <- "Cain"
+mathys_cell_type_prop_df$dataset <- "Mathys"
+
+identical(colnames(cain_cell_type_prop_df), colnames(mathys_cell_type_prop_df)) #checks before rbind all together
+
+ad_snrnaseq_df = bind_rows(mathys_cell_type_prop_df, cain_cell_type_prop_df)
+
+ad_snrnaseq_df$LOAD = factor(ad_snrnaseq_df$LOAD, levels = c('C', 'AD', 'OTHER'))
+ad_snrnaseq_df$dataset = factor(ad_snrnaseq_df$dataset, levels = c('Mathys', 'Cain'))
+ad_snrnaseq_df$msex = factor(ad_snrnaseq_df$msex)
+str(ad_snrnaseq_df)
+
+### some checks
+
+# tally of individuals by case and dataset
+ad_snrnaseq_df %>% select(projid, dataset, LOAD) %>%
+  distinct(.keep_all = T) %>% group_by(dataset, LOAD) %>% tally()
+
+# plot of data
+ad_snrnaseq_df %>% 
+  filter(subclass == 'In4', LOAD %in% c('C', 'AD')) %>% 
+  ggplot(aes(x = LOAD, y = cell_type_proportion * 100)) + 
+  geom_boxplot(outlier.shape = NA, ) + 
+  geom_quasirandom() + 
+  facet_wrap(~dataset, scales = 'free_x') + 
+  ylab('SST snCTP (%)') + 
+  xlab('')
+
+### calculate LOAD beta coefficients
+
+# check for cases where all counts of a cell type = zero (mean would = exactly 0)
+test <- ad_snrnaseq_df %>% select(cell_type_proportion, projid, subclass, dataset, LOAD) %>% filter(LOAD %in% c('C', 'AD')) %>%
+  group_by(subclass, dataset, LOAD) %>% summarize(mean_prop = mean(cell_type_proportion, na.rm = TRUE))
+test[test$mean_prop == 0, "subclass"]
+remove(test)
+
+# calculate beta coefficients
+
+beta_coefs_non_meta_df_orig <- beta_coefs_non_meta_df[0,c(2:7,1)]
+
+for (curr_dataset in unique(ad_snrnaseq_df$dataset)) {
+  print(curr_dataset)
+  temp_df <- ad_snrnaseq_df[ad_snrnaseq_df$dataset == curr_dataset, ]
+  cell_type_list <- unique(temp_df$subclass)
+  for (curr_cell_type in cell_type_list){
+    print(curr_cell_type)
+    df = temp_df %>% filter(LOAD %in% c('C', 'AD'))
+    df = df[df$subclass == curr_cell_type, ]
+    my_model = lm('scale(cell_type_proportion) ~ scale(age_death) + factor(msex) + scale(pmi) + LOAD ',
+                  data = df)
+    model_df = tidy(my_model)
+    model_df$dataset = curr_dataset
+    model_df$subclass = curr_cell_type
+    beta_coefs_non_meta_df_orig <- bind_rows(beta_coefs_non_meta_df_orig, model_df)
+  }
+  
+}
+
+### Plot results
+
+# sets factor levels to match order we want
+
+beta_coefs_non_meta_df_orig$dataset = factor(beta_coefs_non_meta_df_orig$dataset, levels = c('Mathys', 'Cain'))
+beta_coefs_non_meta_df_orig = merge(beta_coefs_non_meta_df_orig, unique(ad_snrnaseq_df[,c("subclass", "class")]), by.x = 'subclass', by.y = 'subclass') #cgg mapping
+
+# plots beta coefficients for LOAD across each dataset faceted by cell type
+
+beta_coefs_non_meta_df_orig %>% filter(term == 'LOADAD', class %in% c("Ex", "Exc")) %>% 
+  ggplot(aes(x = subclass, y = estimate, fill = dataset)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values=c("red", "blue")) + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_wrap(~dataset, scales = "free_x", ncol = 1) + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('') +
+  theme(legend.position = "none") 
+
+#
+#### All mapped identity proportion analysis ####
+
+### Load the datasets
+
+cain_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/M1_Filtered/cain_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+mathys_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/M1_Filtered/mathys_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+zhou_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/M1_Filtered/zhou_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+
+### lm 
+
+### adjustments to and combining of imported datasets
+
+cain_cell_type_prop_df$dataset <- "Cain"
+zhou_cell_type_prop_df$dataset <- "Zhou"
+mathys_cell_type_prop_df$dataset <- "Mathys"
+
+identical(colnames(cain_cell_type_prop_df), colnames(mathys_cell_type_prop_df)) #checks before rbind all together
+identical(colnames(cain_cell_type_prop_df), colnames(zhou_cell_type_prop_df)) #checks before rbind all together
+
+ad_snrnaseq_df = bind_rows(mathys_cell_type_prop_df, cain_cell_type_prop_df, zhou_cell_type_prop_df)
+
+ad_snrnaseq_df$LOAD = factor(ad_snrnaseq_df$LOAD, levels = c('C', 'AD', 'OTHER'))
+ad_snrnaseq_df$dataset = factor(ad_snrnaseq_df$dataset, levels = c('Mathys', 'Cain', 'Zhou'))
+ad_snrnaseq_df$msex = factor(ad_snrnaseq_df$msex)
+str(ad_snrnaseq_df)
+
+### some checks
+
+# tally of individuals by case and dataset
+ad_snrnaseq_df %>% select(projid, dataset, LOAD) %>%
+  distinct(.keep_all = T) %>% group_by(dataset, LOAD) %>% tally()
+
+# plot of data
+ad_snrnaseq_df %>% 
+  filter(subclass == 'Sst', LOAD %in% c('C', 'AD')) %>% 
+  ggplot(aes(x = LOAD, y = cell_type_proportion * 100)) + 
+  geom_boxplot(outlier.shape = NA, ) + 
+  geom_quasirandom() + 
+  facet_wrap(~dataset, scales = 'free_x') + 
+  ylab('SST snCTP (%)') + 
+  xlab('')
+
+### calculate LOAD beta coefficients
+
+# check for cases where all counts of a cell type = zero (mean would = exactly 0)
+test <- ad_snrnaseq_df %>% select(cell_type_proportion, projid, subclass, dataset, LOAD) %>% filter(LOAD %in% c('C', 'AD')) %>%
+  group_by(subclass, dataset, LOAD) %>% summarize(mean_prop = mean(cell_type_proportion, na.rm = TRUE))
+test[test$mean_prop == 0, c("subclass", "dataset")]
+remove(test)
+
+# for troubleshooting the above function (basically convert the above into for loops):
+
+beta_coefs_non_meta_df_ALL <- beta_coefs_non_meta_df[0,c(2:7,1)] # first time
+
+for (curr_dataset in unique(ad_snrnaseq_df$dataset)) {
+  print(curr_dataset)
+  temp_df <- ad_snrnaseq_df[ad_snrnaseq_df$dataset == curr_dataset, ]
+  cell_type_list <- unique(temp_df$subclass)
+  
+  #if (curr_dataset == "Zhou"){
+  #cell_type_list <- cell_type_list[cell_type_list != "L6b"]
+  #}  #CgG only
+  
+  for (curr_cell_type in cell_type_list){
+    print(curr_cell_type)
+    df = temp_df %>% filter(LOAD %in% c('C', 'AD'))
+    df = df[df$subclass == curr_cell_type, ]
+    my_model = lm('scale(cell_type_proportion) ~ scale(age_death) + factor(msex) + scale(pmi) + LOAD ',
+                  data = df)
+    model_df = tidy(my_model)
+    model_df$dataset = curr_dataset
+    model_df$subclass = curr_cell_type
+    model_df$mapping = "M1" # as appropriate
+    model_df$filtering = "Filtered" # as appropriate
+    beta_coefs_non_meta_df_ALL <- bind_rows(beta_coefs_non_meta_df_ALL, model_df)
+  }
+  
+}
+
+beta_coefs_non_meta_df_ALL$mapping <-"CgG" # after first run
+beta_coefs_non_meta_df_ALL$filtering <-"Filtered" # after first run
+
+beta_coefs_non_meta_df_backup <- beta_coefs_non_meta_df_ALL # as desired
+table(beta_coefs_non_meta_df_ALL$mapping, beta_coefs_non_meta_df_ALL$filtering, exclude = "ifany")
+
+### Plot results
+
+# final adjustments to metadata/factors
+
+beta_coefs_non_meta_df_ALL$dataset = factor(beta_coefs_non_meta_df_ALL$dataset, levels = c('Mathys', 'Cain', "Zhou"))
+beta_coefs_non_meta_df_ALL$filtering = factor(beta_coefs_non_meta_df_ALL$filtering, levels = c('Unfiltered', 'Filtered'))
+subclass_meta_total <- bind_rows(subclass_meta, subclass_meta_M1)
+subclass_meta_total[subclass_meta_total$class == "Non-neuronal", "class"] <- "Non-Neuronal"
+beta_coefs_non_meta_df_ALL = merge(beta_coefs_non_meta_df_ALL, unique(subclass_meta_total[,c("subclass", "class")]), by.x = 'subclass', by.y = 'subclass') #cgg mapping
+
+# plots beta coefficients for LOAD across each dataset faceted by cell type
+
+beta_coefs_non_meta_df_ALL %>% filter(term == 'LOADAD', class == "Glutamatergic") %>% 
+  ggplot(aes(x = subclass, y = estimate, fill = filtering)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values=c("blue", "cyan")) + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_grid(dataset ~ mapping*filtering, scales = "free", space = "free") + 
+  #facet_wrap(~dataset*mapping*filtering, scales = "free_x") + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('') +
+  theme(legend.position = "none") 
+
+beta_coefs_non_meta_df_ALL %>% filter(term == 'LOADAD', class == "Glutamatergic") %>% 
+  ggplot(aes(x = dataset, y = estimate)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_grid(subclass ~ mapping*filtering, scales = "free", space = "free") + 
+  #facet_wrap(~dataset*mapping*filtering, scales = "free_x") + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('') +
+  theme(legend.position = "none") 
 
 #
 #### Unused code from Shreejoy ####
