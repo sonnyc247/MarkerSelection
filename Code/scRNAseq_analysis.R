@@ -1500,6 +1500,10 @@ beta_coefs_non_meta_df_ALL %>% filter(term == 'LOADAD', class == "Glutamatergic"
   xlab('') +
   theme(legend.position = "none") 
 
+#save
+
+write.csv(beta_coefs_non_meta_df_combined, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/LOADAD_lm_results/beta_coefs_non_meta_df_4in1_common_subclasses.csv")
+
 #
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
