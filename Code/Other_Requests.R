@@ -258,9 +258,9 @@ library(Seurat)
 library(MAST)
 library(dplyr)
 
-Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj.rds")
+Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_03JUN21.rds")
 table(Seu_AIBS_obj$outlier_call, exclude = "ifany") #check for outliers
-table(Seu_AIBS_obj$NeuN_Region) #check our data composition
+table(Seu_AIBS_obj$NeuN_Region, exclude = "ifany") #check our data composition
 
 ### make new IT groups
 
@@ -317,11 +317,12 @@ Seu_AIBS_obj <- subset(Seu_AIBS_obj, subset = subclass_label_expanded == "L4 IT"
 ### find markers
 
 Idents(Seu_AIBS_obj) <- "subclass_label_expanded" #assign proper labels
+Idents(Seu_AIBS_obj) <- "class_label" #assign proper labels
 
-new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
-new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
 
-### remove duplicates
+### remove duplicates, if desired
 
 dup_list <- unique(new_AIBS_markers_mast_expIT_ALL[duplicated(new_AIBS_markers_mast_expIT_ALL$gene),"gene"]) #list of duplicated genes
 new_AIBS_markers_mast_expIT_ALL <- new_AIBS_markers_mast_expIT_ALL[!(new_AIBS_markers_mast_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
@@ -333,26 +334,31 @@ remove(dup_list) #clean temporary object
 
 ### finalize df
 
-length(intersect(new_AIBS_markers_mast_expIT_ALL$gene, new_AIBS_markers_roc_expIT_ALL$gene)) #see intersect of marker genes
-Result_df <- merge(new_AIBS_markers_roc_expIT_ALL, new_AIBS_markers_mast_expIT_ALL, by = "gene", all.x = TRUE, all.y = TRUE) #combine the marker df; may want to double check the indices/order
+new_AIBS_markers_mast_expIT_ALL$group_gene <- paste0(new_AIBS_markers_mast_expIT_ALL$cluster, "_", new_AIBS_markers_mast_expIT_ALL$gene)
+new_AIBS_markers_roc_expIT_ALL$group_gene <- paste0(new_AIBS_markers_roc_expIT_ALL$cluster, "_", new_AIBS_markers_roc_expIT_ALL$gene)
+
+length(intersect(new_AIBS_markers_mast_expIT_ALL$group_gene, new_AIBS_markers_roc_expIT_ALL$group_gene)) #see intersect of marker genes
+Result_df <- merge(new_AIBS_markers_roc_expIT_ALL, new_AIBS_markers_mast_expIT_ALL, by = "group_gene", all.x = TRUE, all.y = TRUE) #combine the marker df; may want to double check the indices/order
 
 test <- Result_df[complete.cases(Result_df),]
 identical(test$avg_log2FC.x, test$avg_log2FC.y)
 identical(test$pct.1.x, test$pct.1.y)
 identical(test$pct.2.x, test$pct.2.y)
 identical(test$cluster.x, test$cluster.y)
+identical(test$gene.x, test$gene.y) # as appropriate
 remove(test)
 
 Result_df <- Result_df %>% mutate(cluster = coalesce(cluster.x, cluster.y))
 Result_df <- Result_df %>% mutate(avg_log2FC = coalesce(avg_log2FC.x, avg_log2FC.y))
 Result_df <- Result_df %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
 Result_df <- Result_df %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+Result_df <- Result_df %>% mutate(gene = coalesce(gene.x, gene.y))
 Result_df <- Result_df[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "avg_diff", "myAUC", "power", "p_val", "p_val_adj")]
 
 Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
 colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
 
-write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/CgG/new_CgG_results_ITexpand_lfct2.csv") #save/export results
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_class_ITexpand_lfct15_minpct25_dup.csv") #save/export results
 
 #
 #### get celltype markers from Mathys ####
