@@ -264,7 +264,7 @@ table(Seu_AIBS_obj$NeuN_Region, exclude = "ifany") #check our data composition
 
 ### make new IT groups
 
-Seu_AIBS_obj$subclass_label_expanded <- Seu_AIBS_obj$subclass_label #make new variable, starting from subclasses
+Seu_AIBS_obj$subclass_label_expanded <- Seu_AIBS_obj$subclass_label_expanded #make new variable, starting from subclasses
 
 Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %in% c("Neuron 062",
                                                                                      "Neuron 063",
@@ -296,8 +296,11 @@ Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %i
 Seu_AIBS_obj$subclass_label_expanded[Seu_AIBS_obj$cell_type_designation_label %in% c("Neuron 077",
                                                                                      "Neuron 078")] <- "Other IT" #set Leftover IT
 
-table(Seu_AIBS_obj$subclass_label_expanded)
-Idents(Seu_AIBS_obj) <- "subclass_label_expanded"
+Seu_AIBS_obj$subclass_label_expanded_L35IT[Seu_AIBS_obj$subclass_label_expanded %in% c("L5 IT",
+                                                                                       "Other IT")] <- "L3/5 IT" #set Leftover IT
+
+table(Seu_AIBS_obj$subclass_label_expanded_L35IT)
+Idents(Seu_AIBS_obj) <- "subclass_label_expanded_L35IT"
 table(Idents(Seu_AIBS_obj)) #double check what subclasses we have and that they're set as active identity
 
 ### subset as needed ###
@@ -316,7 +319,7 @@ Seu_AIBS_obj <- subset(Seu_AIBS_obj, subset = subclass_label_expanded == "L4 IT"
 
 ### find markers
 
-Idents(Seu_AIBS_obj) <- "subclass_label_expanded" #assign proper labels
+Idents(Seu_AIBS_obj) <- "subclass_label_expanded_L35IT" #assign proper labels
 Idents(Seu_AIBS_obj) <- "class_label" #assign proper labels
 
 new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
@@ -358,7 +361,7 @@ Result_df <- Result_df[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "av
 Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
 colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
 
-write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_class_ITexpand_lfct15_minpct25_dup.csv") #save/export results
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_ITexpand_WL35IT_lfct15_minpct25_dup.csv") #save/export results
 
 #
 #### get celltype markers from Mathys ####

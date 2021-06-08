@@ -1505,6 +1505,57 @@ beta_coefs_non_meta_df_ALL %>% filter(term == 'LOADAD', class == "Glutamatergic"
 write.csv(beta_coefs_non_meta_df_combined, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/LOADAD_lm_results/beta_coefs_non_meta_df_4in1_common_subclasses.csv")
 
 #
+#### Revisited mapping (Hodge all regions, expanded subclasses with L3/5 IT) ####
+
+# load Seu objects
+
+Seu_ref_object <- Seu_AIBS_obj
+
+Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds.rds")
+
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_22MAY21.rds") #load mathys seurat object
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+# prep as needed
+
+table(Seu_ref_object$outlier_call, exclude = "ifany")
+table(Seu_ref_object$subclass_label_expanded_L35IT, exclude = "ifany")
+
+Seu_ref_object <- FindVariableFeatures(Seu_ref_object, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferring
+length(Seu_ref_object@assays$RNA@var.features) #check
+Idents(Seu_ref_object) <- "subclass_label_expanded_L35IT" #so that we're mapping at the subclass level
+table(Idents(Seu_ref_object))
+
+test <- Seu_map_object@assays$RNA@var.features
+Seu_map_object <- FindVariableFeatures(Seu_map_object, selection.method = "vst", nfeatures = 2000, verbose = FALSE) #need variable features for transferrin
+test2 <- Seu_map_object@assays$RNA@var.features
+identical(test, test2)
+remove(test)
+remove(test2)
+
+length(intersect(VariableFeatures(Seu_map_object), VariableFeatures(Seu_ref_object)))
+length(intersect(VariableFeatures(Seu_map_object), rownames(Seu_ref_object)))
+length(intersect(rownames(Seu_map_object), VariableFeatures(Seu_ref_object)))
+
+#transfer
+tanchors <- FindTransferAnchors(reference = Seu_ref_object, query = Seu_map_object, dims = 1:30)
+predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label, dims = 1:30)
+
+
+
+Seu_zhou_obj <- AddMetaData(Seu_zhou_obj, metadata = predictions)
+
+length(intersect(VariableFeatures(Seu_zhou_obj), tanchors@anchor.features))
+
+# export df for plotting
+
+export_holder <- cell_prop_meta_long
+colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+write.csv(export_holder, "cain_cell_type_prop_df_noNA.csv")
+
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
 mathys_cell_prop_meta_long %>% ggplot(aes(x = gpath, y = cell_type_prop, color = pathoAD, group = 1)) + 
