@@ -1514,9 +1514,9 @@ Seu_ref_object <- Seu_AIBS_obj
 Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds.rds")
 
 Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_22MAY21.rds") #load mathys seurat object
-Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_22MAY21.rds") #load cain seurat object (instead)
 Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for cain object only
-Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj.rds") #load zhou seurat object (instead)
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_22MAY21.rds") #load zhou seurat object (instead)
 Seu_map_object <- subset(Seu_map_object, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
 
 # prep as needed
@@ -1542,19 +1542,21 @@ length(intersect(rownames(Seu_map_object), VariableFeatures(Seu_ref_object)))
 
 #transfer
 tanchors <- FindTransferAnchors(reference = Seu_ref_object, query = Seu_map_object, dims = 1:30)
-predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label, dims = 1:30)
+predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label_expanded_L35IT, dims = 1:30)
 
+metada_to_add <- predictions[, c("predicted.id", "prediction.score.max")]
+colnames(metada_to_add) <- paste0(colnames(metada_to_add), ".", "AllHodge_ExpSubclas")
+table(metada_to_add$predicted.id.AllHodge_ExpSubclas)
 
+Seu_map_object
+Seu_map_object <- AddMetaData(Seu_map_object, metadata = metada_to_add)
+table(Seu_map_object$predicted.id.AllHodge_ExpSubclas, Seu_map_object$subtype, exclude = "ifany")
 
-Seu_zhou_obj <- AddMetaData(Seu_zhou_obj, metadata = predictions)
+length(intersect(VariableFeatures(Seu_map_object), tanchors@anchor.features))
 
-length(intersect(VariableFeatures(Seu_zhou_obj), tanchors@anchor.features))
+# save updated seurat object
 
-# export df for plotting
-
-export_holder <- cell_prop_meta_long
-colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
-write.csv(export_holder, "cain_cell_type_prop_df_noNA.csv")
+saveRDS(Seu_map_object, "~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_09JUN21.rds") 
 
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
