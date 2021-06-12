@@ -1550,13 +1550,14 @@ table(metada_to_add$predicted.id.AllHodge_ExpSubclas)
 
 Seu_map_object
 Seu_map_object <- AddMetaData(Seu_map_object, metadata = metada_to_add)
-table(Seu_map_object$predicted.id.AllHodge_ExpSubclas, Seu_map_object$subtype, exclude = "ifany")
+table(Seu_map_object$predicted.id.AllHodge_ExpSubclas, exclude = "ifany")
+table(Seu_map_object$predicted.id.CgG, Seu_map_object$predicted.id.AllHodge_ExpSubclas, exclude = "ifany")
 
 length(intersect(VariableFeatures(Seu_map_object), tanchors@anchor.features))
 
 # save updated seurat object
 
-saveRDS(Seu_map_object, "~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_09JUN21.rds") 
+saveRDS(Seu_map_object, "~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_11JUN21.rds") 
 
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)

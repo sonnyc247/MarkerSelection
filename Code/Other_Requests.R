@@ -258,7 +258,7 @@ library(Seurat)
 library(MAST)
 library(dplyr)
 
-Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_03JUN21.rds")
+Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
 table(Seu_AIBS_obj$outlier_call, exclude = "ifany") #check for outliers
 table(Seu_AIBS_obj$NeuN_Region, exclude = "ifany") #check our data composition
 
@@ -322,18 +322,18 @@ Seu_AIBS_obj <- subset(Seu_AIBS_obj, subset = subclass_label_expanded == "L4 IT"
 Idents(Seu_AIBS_obj) <- "subclass_label_expanded_L35IT" #assign proper labels
 Idents(Seu_AIBS_obj) <- "class_label" #assign proper labels
 
-new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
-new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.5, min.pct = .25, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
 
 ### remove duplicates, if desired
 
-dup_list <- unique(new_AIBS_markers_mast_expIT_ALL[duplicated(new_AIBS_markers_mast_expIT_ALL$gene),"gene"]) #list of duplicated genes
-new_AIBS_markers_mast_expIT_ALL <- new_AIBS_markers_mast_expIT_ALL[!(new_AIBS_markers_mast_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
+#dup_list <- unique(new_AIBS_markers_mast_expIT_ALL[duplicated(new_AIBS_markers_mast_expIT_ALL$gene),"gene"]) #list of duplicated genes
+#new_AIBS_markers_mast_expIT_ALL <- new_AIBS_markers_mast_expIT_ALL[!(new_AIBS_markers_mast_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
 
-dup_list <- unique(new_AIBS_markers_roc_expIT_ALL[duplicated(new_AIBS_markers_roc_expIT_ALL$gene),"gene"]) #list of duplicated genes
-new_AIBS_markers_roc_expIT_ALL <- new_AIBS_markers_roc_expIT_ALL[!(new_AIBS_markers_roc_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
+#dup_list <- unique(new_AIBS_markers_roc_expIT_ALL[duplicated(new_AIBS_markers_roc_expIT_ALL$gene),"gene"]) #list of duplicated genes
+#new_AIBS_markers_roc_expIT_ALL <- new_AIBS_markers_roc_expIT_ALL[!(new_AIBS_markers_roc_expIT_ALL$gene %in% dup_list),] #remove duplicated marker genes
 
-remove(dup_list) #clean temporary object
+#remove(dup_list) #clean temporary object
 
 ### finalize df
 
@@ -361,6 +361,7 @@ Result_df <- Result_df[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "av
 Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
 colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
 
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_ITexpand_WL35IT.csv") #save/export results
 write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_ITexpand_WL35IT_lfct15_minpct25_dup.csv") #save/export results
 
 #
