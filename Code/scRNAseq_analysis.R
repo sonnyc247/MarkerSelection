@@ -666,7 +666,7 @@ write.csv(export_holder, "cain_cell_type_prop_df_noNA.csv")
 #### Revisited mapping (CgG only) ####
 
 # load objects
-Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/new_Seu_AIBS_obj.rds")
+Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
 
 Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj.rds") #load mathys seurat object
 Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj.rds") #load cain seurat object (instead)
@@ -1050,7 +1050,7 @@ write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Da
 
 
 #
-#### lm of MGPs and for rosmap factors ####
+#### lm of snCTPs and for rosmap factors ####
 
 ### Load the datasets
 
@@ -1558,6 +1558,207 @@ length(intersect(VariableFeatures(Seu_map_object), tanchors@anchor.features))
 # save updated seurat object
 
 saveRDS(Seu_map_object, "~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_11JUN21.rds") 
+
+#### Proportion analysis revisited - hodge all regions, expanded subclasses with L3/5 IT ####
+
+### load objects
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_08Jun21.rds")
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_11JUN21.rds") #load cain seurat object (instead)
+Seu_prop_obj <- subset(Seu_prop_obj, subset = subtype == "None.NA", invert = TRUE) # for cain object only
+Seu_prop_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_11JUN21.rds") #load zhou seurat object (instead)
+Seu_prop_obj <- subset(Seu_prop_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500) #for zhou object only
+
+# pull metadata with subclass annotations into data frame
+meta_df <- Seu_prop_obj@meta.data %>% as.data.frame()
+remove(Seu_prop_obj)
+#meta_df_backup <- meta_df
+#meta_df <- meta_df_backup
+#meta_df <- meta_df[!(meta_df$predicted.id.CgG == "IT" & meta_df$prediction.score.max.CgG < 0.8),] # as appropriate
+#meta_df <- meta_df[!(meta_df$predicted.id.M1 == "L2/3 IT" & meta_df$prediction.score.max.M1 < 0.8),] # as appropriate
+meta_df <- meta_df %>% rename(subclass = predicted.id.AllHodge_ExpSubclas) # as appropriate
+
+# count up cell counts per subclass and total per subject
+cell_type_counts_initial <- meta_df %>% group_by(projid, subclass) %>% summarize(cell_type_count = n())
+
+cell_type_counts <- as.data.frame(table(cell_type_counts_initial$projid, cell_type_counts_initial$subclass))
+cell_type_counts$bridger <- paste0(cell_type_counts$Var1, "_", cell_type_counts$Var2)
+cell_type_counts_initial$bridger <- paste0(cell_type_counts_initial$projid, "_", cell_type_counts_initial$subclass)
+cell_type_counts <- merge(cell_type_counts[,-3], cell_type_counts_initial[,3:4], by = "bridger", all.x = T, all.y = T)
+cell_type_counts <- cell_type_counts[,2:4]
+colnames(cell_type_counts)[1:2] <- c("projid", "subclass")
+cell_type_counts$cell_type_count[is.na(cell_type_counts$cell_type_count)] <- 0
+
+tot_cell_counts <- meta_df %>% group_by(projid) %>% summarize(tot_cell_counts = n())
+
+table(meta_df$subclass, meta_df$projid)
+
+# calculate cell proportions and standard errors per subclass per subject
+cell_prop_df <- merge(tot_cell_counts, cell_type_counts) %>% 
+  mutate(cell_type_prop <- cell_type_count / tot_cell_counts, 
+         cell_type_prop_se <- sqrt((cell_type_prop * (1 - cell_type_prop))/tot_cell_counts))
+
+names(cell_prop_df)[5] <- "cell_type_prop"
+names(cell_prop_df)[6] <- "cell_type_prop_se"
+
+# merge cell proportions with subject level meta
+cell_prop_meta_long <- merge(cell_prop_df, unique(meta_df[,c("projid", "age_death_Update_22MAY21", "msex_Update_22MAY21", "pmi_Update_22MAY21", "LOAD_Update_22MAY21")]), by = "projid")
+colnames(cell_prop_meta_long)[7:10] <- c("age_death", "msex", "pmi", "LOAD")
+
+cell_prop_meta_long %>% 
+  filter(subclass == "SST") %>% 
+  group_by(LOAD, subclass) %>% 
+  summarize(m = mean(cell_type_prop))
+
+# plot
+
+ggplot(cell_prop_meta_long, aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  facet_wrap(~ subclass, scales = "free") +
+  xlab('Cell types') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+ggplot(cell_prop_meta_long[cell_prop_meta_long$subclass == "SST",], aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot(aes(middle = mean(cell_type_prop))) +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  xlab('AD Group') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+table(cell_prop_meta_long$subclass, cell_prop_meta_long$LOAD)
+
+# export df for plotting
+
+export_holder <- cell_prop_meta_long
+colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/AllHodge_Unfiltered/cain_cell_type_prop_df.csv")
+
+#
+
+#### lm of all-hodge snCTPs and for rosmap factors ####
+
+### Load the datasets
+
+cain_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/AllHodge_Unfiltered/cain_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+mathys_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/AllHodge_Unfiltered/mathys_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+zhou_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/AllHodge_Unfiltered/zhou_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+
+### adjustments to and combining of imported datasets
+
+cain_cell_type_prop_df$dataset <- "Cain"
+mathys_cell_type_prop_df$dataset <- "Mathys"
+zhou_cell_type_prop_df$dataset <- "Zhou"
+
+identical(colnames(cain_cell_type_prop_df), colnames(mathys_cell_type_prop_df)) #checks before rbind all together
+identical(colnames(cain_cell_type_prop_df), colnames(zhou_cell_type_prop_df)) 
+
+ad_snrnaseq_df = bind_rows(mathys_cell_type_prop_df, zhou_cell_type_prop_df, cain_cell_type_prop_df)
+
+ad_snrnaseq_df$LOAD = factor(ad_snrnaseq_df$LOAD, levels = c('C', 'AD', 'OTHER'))
+ad_snrnaseq_df$dataset = factor(ad_snrnaseq_df$dataset, levels = c('Mathys', 'Zhou', 'Cain'))
+ad_snrnaseq_df$msex = factor(ad_snrnaseq_df$msex)
+str(ad_snrnaseq_df)
+
+### some checks
+
+# tally of individuals by case and dataset
+ad_snrnaseq_df %>% select(projid, dataset, LOAD) %>%
+  distinct(.keep_all = T) %>% group_by(dataset, LOAD) %>% tally()
+
+# plot of data
+ad_snrnaseq_df %>% 
+  filter(subclass == 'SST', LOAD %in% c('C', 'AD')) %>% 
+  ggplot(aes(x = LOAD, y = cell_type_proportion * 100)) + 
+  geom_boxplot(outlier.shape = NA, ) + 
+  geom_quasirandom() + 
+  facet_wrap(~dataset, scales = 'free_x') + 
+  ylab('SST snCTP (%)') + 
+  xlab('')
+
+### calculate LOAD beta coefficients
+
+# check for cases where all counts of a cell type = zero (mean would = exactly 0)
+test <- ad_snrnaseq_df %>% select(cell_type_proportion, projid, subclass, dataset, LOAD) %>% filter(LOAD %in% c('C', 'AD')) %>%
+  group_by(subclass, dataset, LOAD) %>% summarize(mean_prop = mean(cell_type_proportion, na.rm = TRUE))
+test[test$mean_prop == 0, c("subclass", "dataset")]
+remove(test)
+
+# for troubleshooting the above function (basically convert the above into for loops):
+
+beta_coefs_non_meta_df_ALL <- beta_coefs_non_meta_df[0,c(2:7,1)] # first time
+
+for (curr_dataset in unique(ad_snrnaseq_df$dataset)) {
+  print(curr_dataset)
+  temp_df <- ad_snrnaseq_df[ad_snrnaseq_df$dataset == curr_dataset, ]
+  cell_type_list <- unique(temp_df$subclass)
+  
+  #if (curr_dataset == "Zhou"){
+  #cell_type_list <- cell_type_list[cell_type_list != "L6b"]
+  #}  #CgG only
+  
+  for (curr_cell_type in cell_type_list){
+    print(curr_cell_type)
+    df = temp_df %>% filter(LOAD %in% c('C', 'AD'))
+    df = df[df$subclass == curr_cell_type, ]
+    if (mean(df$cell_type_proportion == 0)) {
+      next
+    }
+    my_model = lm('scale(cell_type_proportion) ~ scale(age_death) + factor(msex) + scale(pmi) + LOAD ',
+                  data = df)
+    model_df = tidy(my_model)
+    model_df$dataset = curr_dataset
+    model_df$subclass = curr_cell_type
+    model_df$mapping = "M1" # as appropriate
+    model_df$filtering = "Filtered" # as appropriate
+    beta_coefs_non_meta_df_ALL <- bind_rows(beta_coefs_non_meta_df_ALL, model_df)
+  }
+  
+}
+
+beta_coefs_non_meta_df_ALL$mapping <-"All_Hodge" # after first run
+beta_coefs_non_meta_df_ALL$filtering <-"Unfiltered" # after first run
+
+### Plot results
+
+# final adjustments to metadata/factors
+
+beta_coefs_non_meta_df_ALL$dataset = factor(beta_coefs_non_meta_df_ALL$dataset, levels = c('Mathys', 'Cain', "Zhou"))
+Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
+subclass_class_holder <- unique(Seu_ref_object[[c("subclass_label_expanded_L35IT", "class_label")]])
+names(subclass_class_holder) <- c("subclass", "class")
+beta_coefs_non_meta_df_ALL = merge(beta_coefs_non_meta_df_ALL, subclass_class_holder, by.x = 'subclass', by.y = 'subclass') 
+
+# plots beta coefficients for LOAD across each dataset faceted by cell type
+
+beta_coefs_non_meta_df_ALL %>% filter(term == 'LOADAD') %>% 
+  ggplot(aes(x = subclass, y = estimate, fill = class)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values=c("red", "blue", "grey")) + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_grid(dataset ~ class, scales = "free", space = "free") + 
+  #facet_wrap(~dataset*mapping*filtering, scales = "free_x") + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('') +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 25, margin=margin(t=15)))
+  
+#save
+
+write.csv(beta_coefs_non_meta_df_ALL, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/LOADAD_lm_results/beta_coefs_non_meta_df_allhodge_unfiltered.csv")
+
+
 
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
