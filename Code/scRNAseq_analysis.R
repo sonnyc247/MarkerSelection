@@ -1760,6 +1760,71 @@ write.csv(beta_coefs_non_meta_df_ALL, "/external/rprshnas01/kcni/ychen/git/Marke
 
 
 
+#### Confusion matrix original vs allhodgeregions_expandedITwithL3/5 ####
+
+# load data
+
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_08Jun21.rds") #load Mathys Seurat object
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_11JUN21.rds") #load Cain Seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for Cain object only
+
+# get numbers for confusion matrix
+
+metadata_for_plot <- Seu_map_object@meta.data
+
+table(metadata_for_plot$Subcluster) # for Mathys
+metadata_for_plot <- metadata_for_plot[,c("nCount_RNA", "nFeature_RNA", "Subcluster", "predicted.id.AllHodge_ExpSubclas")] # for Mathys
+
+table(metadata_for_plot$subtype) # for Cain
+metadata_for_plot <- metadata_for_plot[,c("nCount_RNA", "nFeature_RNA", "subtype", "predicted.id.AllHodge_ExpSubclas")] 
+
+confusion_martix_hold <- as.matrix(table(metadata_for_plot$Subcluster, metadata_for_plot$predicted.id.AllHodge_ExpSubclas)) # for mathys 
+confusion_martix_hold <- as.matrix(table(metadata_for_plot$subtype, metadata_for_plot$predicted.id.AllHodge_ExpSubclas)) # for cain 
+confusion_martix_hold <- as.matrix(confusion_martix_hold)
+confusion_martix_hold <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
+
+# plot heatmap
+
+display.brewer.all()
+dev.off() #as needed to reset graphics
+
+pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+#pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+
+### plot in ggplot
+
+melted_conf_mtx <- melt(t(confusion_martix_hold[nrow(confusion_martix_hold):1,]))
+
+ggplot(melted_conf_mtx, aes(Var1,Var2, fill=value)) + 
+  geom_raster() +
+  scale_fill_gradientn(colours = brewer.pal(9 ,"Blues")) +
+  theme_classic() +
+  xlab("Mapped subclass") + 
+  ylab("Pre-mapping cell group") +
+  labs(fill = "% of pre- \n mapping \n cell group") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.4, hjust = 1),
+        axis.title.y =  element_text(margin = margin(t = 0, r = 5, b = 0, l = 0))) +
+  theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank()) +
+  theme(legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,-10),
+        axis.line.y = element_blank(),
+        axis.line.x = element_blank()) 
+
+### export plot (most recently plotted)
+
+ggsave(width = 180,
+       height = 300,
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Heatmap/",
+       filename = "OrigvsAllHodgeExpIT_Cain.pdf",
+       device = "pdf")
+
+#
 #### Unused code from Shreejoy ####
 # plot cell proportions per subclass by gpath (global pathology)
 mathys_cell_prop_meta_long %>% ggplot(aes(x = gpath, y = cell_type_prop, color = pathoAD, group = 1)) + 

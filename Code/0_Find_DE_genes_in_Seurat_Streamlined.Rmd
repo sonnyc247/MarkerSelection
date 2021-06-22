@@ -1,12 +1,14 @@
 ---
 title: "2: Finding markers with Seurat"
-author: "Sonny"
+author: "Dr. Yuxiao (Sonny) Chen"
 output: html_document
 ---
 
-This tutorial will go over some basics of Seurat, such as importing and normalizing data, to ultimately facilitate finding cell subclass markers (differentially expressed genes). 
+This tutorial will go over some basics of Seurat, such as importing and normalizing data, to ultimately facilitate finding cell subclass markers (differentially expressed genes or DEGs). 
 
-Let's start by loading all the packages we will need for this session (or install first, as necessary). Seurat (Satija et al., 2015; Hao et al., 2021; https://satijalab.org/seurat/index.html) is our main package for working with scRNAseq data, MAST is the statistical method (Finak et al., 2015) we will use to find differentially expressed genes (DEG's).
+Let's start by loading all the packages we will need for this session (or install first, as necessary). 
+Seurat (Satija et al., 2015; Hao et al., 2021; https://satijalab.org/seurat/index.html) is our main package for working with scRNAseq data. 
+MAST is the statistical method (Finak et al., 2015) we will use to find DEGs.
 
 ```{r packages}
 
@@ -24,8 +26,8 @@ Now let's load our data. We are using human multiple-brain-region SMART-Seq data
 
 ```{r data loading}
 
-sc_metadata <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/metadata.csv", row.names=1) # our metadata
-sc_matrix <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/matrix.csv", row.names=1) # our count matrix
+sc_metadata <- read.csv("/external/rprshnas01/kcni/ychen/git/TeachingScraps/L3_metadata_L.csv", row.names=1) # our metadata
+sc_matrix <- read.csv("/external/rprshnas01/kcni/ychen/git/TeachingScraps/L3_count_matrix_L.csv", row.names=1) # our count matrix
 
 ```
 
@@ -34,7 +36,6 @@ Seurat matches the identity of cells between our metadata and count matrix by ro
 ```{r prepare our metadata for Seurat}
 
 row.names(sc_metadata) <- sc_metadata$sample_name # set sample names to row names
-# sc_metadata <- sc_metadata[,-1] # removing the first column (sample_name) is optional, if it is not removed, it would simply stay as a semi-redundant column in the resulting Seurat object
 sc_metadata[1:5,1:4] # see the first 5 rows and 4 columns of our metadata
 
 ```
@@ -50,7 +51,7 @@ head(sc_matrix[,1:5]) # see the first five columns and rows of our transformed c
 
 ```
 
-Our final count matrix is a transposed matrix. This is the general format of count matrices for RNAseq data. 
+Our final count matrix is a transposed matrix - columns represent samples and rows represent genes. This is the general format of count matrices for RNAseq data. 
 
 We can now create our Seurat object.
 
@@ -62,7 +63,6 @@ Seurat_object <- CreateSeuratObject(count = sc_matrix,
 Seurat_object # see the number of genes (features) and cells (samples) in our object - it matches the corresponding dimensions of our initial data
 
 ```
-
 Both our metadata and our count matrix information, matched by sample names, are stored in the Seurat object. Note however that our count matrix is now stored as a sparse matrix to save space.
 
 ```{r data in our Seurat object}
@@ -71,7 +71,6 @@ Seurat_object@meta.data[1:5, 1:7] # see the first 5 rows and first 7 columns of 
 Seurat_object@assays$RNA@counts[1:5, 1:5] # see the first 5 rows and columns of our count matrix
 
 ```
-
 We next need to normalize our count data. This is important to consider as, for example, we do not want to confound increased gene expression because of biological reasons with increased RNA amplification due to technical differences.
 
 ```{r, normalize data}
@@ -84,8 +83,7 @@ Seurat_object@assays$RNA@data[1:10,1:5] # our normalized data is stored here; pr
 Seurat_object@assays$RNA@counts[1:10,1:5] # our counts are still present in our Seurat object, which we can see here
 
 ```
-
-We already have cell clusters and groups (e.g: classes and subclasses) defined by the AIBS. To simulate the experience of finding clusters, we can go through the steps in Seurat, starting with a PCA.
+We already have cell identity groups (e.g: cell classes and subclasses) defined by the AIBS. To simulate the experience of finding clusters, we can go through the steps in Seurat, starting with a PCA.
 
 ```{r PCA of our data}
 
@@ -104,16 +102,15 @@ Seurat_object <- RunPCA(Seurat_object,
 print(Seurat_object@reductions$pca, dims = 1:5, nfeatures = 5) # see some of our PCs
 
 ```
-
 We can next find clusters and visualize them via UMAP.
 
 ```{r find clusters and visualize}
 
-Seurat_object <- FindNeighbors(Seurat_object) # find neighbours (cells close to one another)
+Seurat_object <- FindNeighbors(Seurat_object) # create Shared Nearest Neighbor graph of data
 Seurat_object  <- FindClusters(Seurat_object) # find clusters
 
 Seurat_object <- RunUMAP(Seurat_object, 
-                         dims = 1:10) # run umap for a number of dimensions, we'll go with 10
+                         dims = 1:10) # run umap for a number of dimensions (from PCA), we'll go with 10
 
 ### plotting
 
@@ -139,7 +136,7 @@ DimPlot(Seurat_object,
 
 ```
 
-We are ready to find cell-type markers. There are a few different options available to use depending on our needs. However, all methods require us to first specify how we are grouping cells. For example, we might want to group cells by cell class (such as inhibitory neurons) or subclass (such as SST cells). Or maybe we want to compare gene expression between cells from different brain regions. To specify this, we set the active "identities" of cells in our Seurat object by pointing to a metadata variable/column.
+We are ready to find cell-type markers. There are a few different options available to use depending on our needs. However, all methods require us to first specify how we are grouping cells. For example, we might want to group cells by cell class (such as inhibitory neurons) or subclass (such as SST cells). Or maybe we want to compare gene expression between cells from different brain regions. To specify this, we set the active "identities" of cells in our Seurat object to a metadata variable/column within the Seurat object.
 
 ```{r, set identity}
 
@@ -148,7 +145,6 @@ Idents(Seurat_object) <- "subclass_label" # set active identity
 head(Idents(Seurat_object)) # see our active identities of cells
 
 ```
-
 To find markers for every cell group (subclass, in the current case) in comparison to all other cells in the dataset, we can use the FindAllMarkers function.
 
 ```{r, find markers for all groups}
@@ -159,15 +155,17 @@ all_group_markers <- FindAllMarkers(object = Seurat_object,
                                     only.pos = T, # only return positive markers (enriched in the cell group of interest)
                                     test.use = "MAST") # the statistical test to use
 
+head(all_group_markers) # preview of our results
+
 ```
 
-We are using some sample threshold values for logfc.threshold and min.pct here. These are values chosen based on our previous work and experience, and are somewhat high, which will also decrease the time needed to run FindAllMarkers. In a more serious analysis, we would adjust these thresholds based on multiple factors, such as what we will use our markers for.
+We are using some sample threshold values for logfc.threshold and min.pct here. These are values chosen based on our previous work and experience. These values may be considered somewhat high, meaning that fewer genes will pass the threshold for testing and that less time will be needed to run FindAllMarkers. In a more serious analysis, we would adjust these thresholds based on multiple factors, such as what we will use our markers for.
 
 If we are not interested in all groups, but rather are interested in only one or a few subclasses, we can use the FindMarkers function instead.
 
 ```{r, find markers for SST cells}
 
-# Using SST subclass as an example
+# Using the SST subclass as an example
 
 SST_markers <- FindMarkers(object = Seurat_object, 
                            ident.1 = "SST", # specify our group of interest here
@@ -176,9 +174,11 @@ SST_markers <- FindMarkers(object = Seurat_object,
                            only.pos = T,
                            test.use = "MAST") 
 
+head(SST_markers) # preview our results
+
 ```
 
-Note the arguments are largely the same between FindMarkers and FindAllMarkers. The code above compares SST cells with all other cells in the dataset as a group. If we wanted to compare between cells of two specific groups (and not combine all "other" groups together like in the code above), we can use the "ident.2" argument in FindMarkers.
+Note the arguments are largely the same between FindMarkers and FindAllMarkers. The code above compares SST cells with all other cells in the dataset as a group. If we wanted to compare between cells of two specific groups (and not combine all other groups together like in the run above), we can use the "ident.2" argument in FindMarkers.
 
 ```{r, find markers for all groups}
 
@@ -191,6 +191,8 @@ SST_vs_VIP_markers <- FindMarkers(object = Seurat_object,
                                   min.pct = .35, 
                                   only.pos = T,
                                   test.use = "MAST") 
+
+head(SST_vs_VIP_markers) # preview our results
 
 ```
 
