@@ -322,8 +322,8 @@ Seu_AIBS_obj <- subset(Seu_AIBS_obj, subset = subclass_label_expanded == "L4 IT"
 Idents(Seu_AIBS_obj) <- "subclass_label_expanded_L35IT" #assign proper labels
 Idents(Seu_AIBS_obj) <- "class_label" #assign proper labels
 
-new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
-new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+new_AIBS_markers_mast_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.1, min.pct = .15, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_expIT_ALL <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.1, min.pct = .15, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
 
 ### remove duplicates, if desired
 
@@ -361,7 +361,7 @@ Result_df <- Result_df[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "av
 Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
 colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
 
-write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_ITexpand_WL35IT.csv") #save/export results
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_class_ITexpand_WL35IT_lfct11_minpct15_dup.csv") #save/export results
 
 #
 #### get celltype markers from Mathys ####
