@@ -64,7 +64,7 @@ new = full_join(AIBS_lnCPM_InEx_ACC, gdp_anno %>% dplyr::select(sample_name, sub
 # calculates averages of gene expression from every cell type using a trimmed mean - takes a while to run
 cell_type_avgs = new %>% dplyr::select(-sample_name) %>% 
   group_by(subclass_label_expanded_L35IT) %>% 
-  summarise_all(mean, trim = .25)
+  summarise_all(mean)
 
 # this is a long data frame that merges subclass info with the cell type gene averages computed above
 cell_type_avgs_long = cell_type_avgs %>% 
@@ -113,7 +113,7 @@ final_markers_df_ranked = final_markers_df_unranked %>%
   arrange(subclass, bretigea_ranking_best) 
 
 # this writes the final ranked markers to a file
-write_csv(final_markers_df_ranked, file = '/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/Ranked_markers_ALLReg_ITexpand_WL35IT_lfct11_minpct15_dup.csv')
+write_csv(final_markers_df_ranked, file = '/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/Ranked_markers_noTrim_ALLReg_ITexpand_WL35IT_lfct11_minpct15_dup.csv')
 
 
 ### visualize a few cell type's markers using group dot plots
@@ -206,7 +206,7 @@ new = full_join(AIBS_lnCPM_InEx_ACC, gdp_anno %>% dplyr::select(sample_name, cla
 # calculates averages of gene expression from every cell type using a trimmed mean - takes a while to run
 cell_type_avgs = new %>% dplyr::select(-sample_name) %>% 
   group_by(class_label) %>% 
-  summarise_all(mean, trim = .25)
+  summarise_all(mean)
 
 # this is a long data frame that merges subclass info with the cell type gene averages computed above
 cell_type_avgs_long = cell_type_avgs %>% 
@@ -255,7 +255,7 @@ final_markers_df_ranked = final_markers_df_unranked %>%
   arrange(class, bretigea_ranking_best) 
 
 # this writes the final ranked markers to a file
-write_csv(final_markers_df_ranked, file = '/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/Ranked_class_markers_ALLReg_ITexpand_WL35IT_lfct11_minpct15_dup.csv')
+write_csv(final_markers_df_ranked, file = '/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/Ranked_class_markers_noTrim_ALLReg_ITexpand_WL35IT_lfct11_minpct15_dup.csv')
 
 
 ### visualize a few cell type's markers using group dot plots
