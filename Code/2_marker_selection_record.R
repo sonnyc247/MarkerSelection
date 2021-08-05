@@ -780,6 +780,77 @@ Result_df_ITcol <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], 
 
 Result_df_ITcol$ensembl_gene_id[is.na(Result_df_ITcol$ensembl_gene_id)] <- "NA"
 Result_df_ITcol$has_ensembl <- Result_df_ITcol$ensembl_gene_id != "NA"
+#### get markers from CgG for excitatory class but all other subclass ####
+
+### initial setup
+
+library(Seurat)
+library(MAST)
+library(dplyr)
+
+Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
+
+table(Seu_AIBS_obj$outlier_call, exclude = "ifany") #check for outliers
+table(Seu_AIBS_obj$NeuN_Region, exclude = "ifany") #check our data composition
+
+Seu_AIBS_obj <- subset(Seu_AIBS_obj, 
+                       subset = NeuN_Region %in% c("A1C_Neuronal",
+                                                    "M1lm_Neuronal",
+                                                    "M1ul_Neuronal",
+                                                    "MTG_Neuronal",
+                                                    "S1lm_Neuronal",
+                                                    "S1ul_Neuronal",
+                                                    "V1C_Neuronal"), 
+                       invert = TRUE)
+
+Seu_AIBS_obj$ExClass_OtherSubclass <- Seu_AIBS_obj$subclass_label # make custom metadata column, starting from subclasses
+
+Seu_AIBS_obj$ExClass_OtherSubclass[Seu_AIBS_obj$ExClass_OtherSubclass %in% c("IT",
+                                                                             "L4 IT",
+                                                                             "L5 ET",
+                                                                             "L5/6 IT Car3",
+                                                                             "L5/6 NP",
+                                                                             "L6 CT",
+                                                                             "L6b")] <- "Excitatory" #set L2/3 IT
+
+table(Seu_AIBS_obj$NeuN_Region, exclude = "ifany") #check our data composition
+table(Seu_AIBS_obj$ExClass_OtherSubclass, exclude = "ifany") #check our data composition
+
+Idents(Seu_AIBS_obj) <- "ExClass_OtherSubclass"
+table(Idents(Seu_AIBS_obj))
+
+new_AIBS_markers_mast_CgG_Emma <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_CgG_Emma <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### for mast
+length(unique(new_AIBS_markers_mast_CgG_Emma$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_CgG_Emma[duplicated(new_AIBS_markers_mast_CgG_Emma$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_CgG_Emma <- new_AIBS_markers_mast_CgG_Emma[!(new_AIBS_markers_mast_CgG_Emma$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_CgG_Emma$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_CgG_Emma[duplicated(new_AIBS_markers_roc_CgG_Emma$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_CgG_Emma <- new_AIBS_markers_roc_CgG_Emma[!(new_AIBS_markers_roc_CgG_Emma$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_CgG_Emma$gene, new_AIBS_markers_roc_CgG_Emma$gene)) #see intersect of marker genes
+
+### combine
+new_AIBS_markers_mast_CgG_Emma$group_gene <- paste0(new_AIBS_markers_mast_CgG_Emma$cluster, "_", new_AIBS_markers_mast_CgG_Emma$gene)
+new_AIBS_markers_roc_CgG_Emma$group_gene <- paste0(new_AIBS_markers_roc_CgG_Emma$cluster, "_", new_AIBS_markers_roc_CgG_Emma$gene)
+
+Result_df_CgGEmma <- merge(new_AIBS_markers_roc_CgG_Emma, new_AIBS_markers_mast_CgG_Emma, by = "group_gene", all.x = T, all.y = T) #combine the marker df
+
+Result_df_CgGEmma <- Result_df_CgGEmma %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df_CgGEmma <- Result_df_CgGEmma %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df_CgGEmma <- Result_df_CgGEmma %>% mutate(avg_log2FC = coalesce(avg_log2FC.x, avg_log2FC.y))
+Result_df_CgGEmma <- Result_df_CgGEmma %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df_CgGEmma <- Result_df_CgGEmma %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+Result_df_CgGEmma <- Result_df_CgGEmma[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "avg_diff", "myAUC", "power", "p_val", "p_val_adj")]
+Result_df_CgGEmma <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_CgGEmma, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+colnames(Result_df_CgGEmma)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df_CgGEmma, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/CgG/new_CgG_results_SubclassWithExc.csv") #save/export results
+
 #### get celltype markers from Mathys dataset (Old/unused - part of validation attempts) ####
 
 # prep metadata

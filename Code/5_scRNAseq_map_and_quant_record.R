@@ -1294,7 +1294,7 @@ write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Da
 
 #
 
-#### Revisited mapping (20% var features, two-threshold QC) INCOMPLETE ####
+#### Revisited mapping - CgG and MTG, original AIBS subclasses,20% var features, two-threshold QC ####
 
 # load Seu objects
 
@@ -1308,13 +1308,27 @@ Seu_map_object <- subset(Seu_map_object, subset = nFeature_RNA > 200 & nFeature_
 
 # prep as needed
 
+table(Seu_ref_object$NeuN_Region, exclude = "ifany")
+Seu_ref_object
+Seu_ref_object <- subset(Seu_ref_object, 
+                         subset = NeuN_Region %in% c("A1C_Neuronal",
+                                                     "M1lm_Neuronal",
+                                                     "M1ul_Neuronal",
+                                                     "S1lm_Neuronal",
+                                                     "S1ul_Neuronal",
+                                                     "V1C_Neuronal"), 
+                         invert = TRUE)
+table(Seu_ref_object$NeuN_Region, exclude = "ifany")
+Seu_ref_object
+
 table(Seu_ref_object$outlier_call, exclude = "ifany")
-table(Seu_ref_object$subclass_label_expanded_L35IT, exclude = "ifany")
+
+table(Seu_ref_object$subclass_label, exclude = "ifany")
+
+# run mapping/predictions
 
 Seu_ref_object <- FindVariableFeatures(Seu_ref_object, selection.method = "vst", nfeatures = round(nrow(Seu_ref_object)/5), verbose = FALSE) #need variable features for transferring
 length(Seu_ref_object@assays$RNA@var.features) #check
-Idents(Seu_ref_object) <- "subclass_label_expanded_L35IT" #so that we're mapping at the subclass level
-table(Idents(Seu_ref_object))
 
 Seu_map_object <- FindVariableFeatures(Seu_map_object, selection.method = "vst", nfeatures = round(nrow(Seu_map_object)/5), verbose = FALSE) #need variable features for transferrin
 length(Seu_map_object@assays$RNA@var.features) #check
@@ -1324,26 +1338,114 @@ length(intersect(VariableFeatures(Seu_map_object), rownames(Seu_ref_object)))
 length(intersect(rownames(Seu_map_object), VariableFeatures(Seu_ref_object)))
 
 # transfer + predict
+
 tanchors <- FindTransferAnchors(reference = Seu_ref_object, query = Seu_map_object, dims = 1:30)
-predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label_expanded_L35IT, dims = 1:30)
+predictions <- TransferData(anchorset = tanchors, refdata = Seu_ref_object$subclass_label, dims = 1:30)
+
+# pass-fail mapping QC
+
+prediction_score_threshold_low <- 0.5
+prediction_score_threshold_high <- 0.8
+bad_cell_type <- "IT"
+
+predictions <- predictions %>% mutate(qc_passing = case_when((predicted.id != bad_cell_type) & (prediction.score.max > prediction_score_threshold_low) ~ T,
+                                                             (predicted.id == bad_cell_type) & (prediction.score.max > prediction_score_threshold_high) ~ T,
+                                                             TRUE ~ F)) 
 
 # save the predictions df
 
-write.csv(predictions, "~/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Mapping_full/predictions_Zhou_AllHodgeBrain_ExpITwL35_20pctTopVar.csv")
+write.csv(predictions, "~/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Mapping_full/predictions_Zhou_MTGnCgG_20PctMostVar.csv")
 
-# get 
+# add metadata to Seu Object
 
-metada_to_add <- predictions[, c("predicted.id", "prediction.score.max")]
-colnames(metada_to_add) <- paste0(colnames(metada_to_add), ".", "AllHodge_ExpSubclas")
-table(metada_to_add$predicted.id.AllHodge_ExpSubclas)
+metada_to_add <- predictions[, c("predicted.id", "prediction.score.max", "qc_passing")]
+colnames(metada_to_add) <- paste0(colnames(metada_to_add), ".", "MTGnCgG_20Pct")
+table(metada_to_add$predicted.id.MTGnCgG_20Pct)
 
 Seu_map_object
 Seu_map_object <- AddMetaData(Seu_map_object, metadata = metada_to_add)
-table(Seu_map_object$predicted.id.AllHodge_ExpSubclas, exclude = "ifany")
-table(Seu_map_object$predicted.id.CgG, Seu_map_object$predicted.id.AllHodge_ExpSubclas, exclude = "ifany")
+table(Seu_map_object$predicted.id.MTGnCgG_20Pct, exclude = "ifany")
+table(Seu_map_object$predicted.id, Seu_map_object$predicted.id.MTGnCgG_20Pct, exclude = "ifany")
 
 length(intersect(VariableFeatures(Seu_map_object), tanchors@anchor.features))
 
 # save updated seurat object
 
-saveRDS(Seu_map_object, "~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_11JUN21.rds") 
+saveRDS(Seu_map_object, "~/git/Ex_Env_Storage/MarkerSelection/Seu_zhou_obj_update_27JUL21.rds") 
+
+### Quantify
+
+# pull metadata with subclass annotations into data frame
+meta_df <- Seu_map_object@meta.data %>% as.data.frame()
+remove(Seu_map_object)
+meta_df_backup <- meta_df
+meta_df <- meta_df[meta_df$qc_passing.MTGnCgG_20Pct == T,] # as appropriate
+meta_df <- meta_df %>% rename(subclass = predicted.id.MTGnCgG_20Pct) # as appropriate
+
+# count up cell counts per subclass and total per subject
+cell_type_counts_initial <- meta_df %>% group_by(projid, subclass) %>% summarize(cell_type_count = n())
+
+cell_type_counts <- as.data.frame(table(cell_type_counts_initial$projid, cell_type_counts_initial$subclass))
+cell_type_counts$bridger <- paste0(cell_type_counts$Var1, "_", cell_type_counts$Var2)
+cell_type_counts_initial$bridger <- paste0(cell_type_counts_initial$projid, "_", cell_type_counts_initial$subclass)
+cell_type_counts <- merge(cell_type_counts[,-3], cell_type_counts_initial[,3:4], by = "bridger", all.x = T, all.y = T)
+cell_type_counts <- cell_type_counts[,2:4]
+colnames(cell_type_counts)[1:2] <- c("projid", "subclass")
+cell_type_counts$cell_type_count[is.na(cell_type_counts$cell_type_count)] <- 0
+
+tot_cell_counts <- meta_df %>% group_by(projid) %>% summarize(tot_cell_counts = n())
+
+table(meta_df$subclass, meta_df$projid)
+
+# calculate cell proportions and standard errors per subclass per subject
+cell_prop_df <- merge(tot_cell_counts, cell_type_counts) %>% 
+  mutate(cell_type_prop <- cell_type_count / tot_cell_counts, 
+         cell_type_prop_se <- sqrt((cell_type_prop * (1 - cell_type_prop))/tot_cell_counts))
+
+names(cell_prop_df)[5] <- "cell_type_prop"
+names(cell_prop_df)[6] <- "cell_type_prop_se"
+
+# merge cell proportions with subject level meta
+cell_prop_meta_long <- merge(cell_prop_df, unique(meta_df[,c("projid", "age_death_Update_22MAY21", "msex_Update_22MAY21", "pmi_Update_22MAY21", "LOAD_Update_22MAY21")]), by = "projid")
+colnames(cell_prop_meta_long)[7:10] <- c("age_death", "msex", "pmi", "LOAD")
+
+cell_prop_meta_long %>% 
+  filter(subclass == "SST") %>% 
+  group_by(LOAD, subclass) %>% 
+  summarize(m = mean(cell_type_prop))
+
+# plot
+
+ggplot(cell_prop_meta_long, aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  facet_wrap(~ subclass, scales = "free") +
+  xlab('Cell types') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+ggplot(cell_prop_meta_long[cell_prop_meta_long$subclass == "IT",], aes(x = LOAD, y = cell_type_prop, fill = LOAD)) + 
+  geom_boxplot(aes(middle = mean(cell_type_prop))) +
+  geom_jitter(width = 0.1) +
+  scale_fill_manual(values = c("white", "light blue", "dark blue")) +
+  xlab('AD Group') + 
+  ylab('Cell type proportion') +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill= "white"),
+        strip.text = element_text(colour = 'black'))
+
+table(cell_prop_meta_long$subclass, cell_prop_meta_long$LOAD)
+
+# export df for plotting
+
+export_holder <- cell_prop_meta_long
+colnames(export_holder)[c(2,4:6)] <- c("total_cell_count_per_individual", "cell_count_per_subclass_per_indiv", "cell_type_proportion", "cell_type_proportion_std_error")
+
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/MTGnCgG_20Pct/Unfiltered/zhou_cell_type_prop_df.csv")
+write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/MTGnCgG_20Pct/Filtered/zhou_cell_type_prop_df.csv")
+

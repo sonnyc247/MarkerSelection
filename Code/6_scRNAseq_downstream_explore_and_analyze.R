@@ -238,7 +238,82 @@ ggsave(width = 180,
        device = "pdf")
 
 #
-#### lm of snCTPs and for rosmap factors ####
+#### Confusion matrix original vs mtgncgg_top20pct ####
+
+# load data
+
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_26Jul21.rds") #load Mathys Seurat object
+Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_27JUL21.rds") #load Cain Seurat object (instead)
+Seu_map_object <- subset(Seu_map_object, subset = subtype == "None.NA", invert = TRUE) # for Cain object only
+
+# get numbers for confusion matrix
+
+metadata_for_plot <- Seu_map_object@meta.data
+
+table(metadata_for_plot$Subcluster) # for Mathys
+metadata_for_plot <- metadata_for_plot[,c("nCount_RNA", "nFeature_RNA", "Subcluster", "predicted.id.MTGnCgG_20Pct", "qc_passing.MTGnCgG_20Pct")] # for Mathys
+
+table(metadata_for_plot$subtype) # for Cain
+metadata_for_plot <- metadata_for_plot[,c("nCount_RNA", "nFeature_RNA", "subtype", "predicted.id.MTGnCgG_20Pct", "qc_passing.MTGnCgG_20Pct")] 
+
+metadata_for_plot <- metadata_for_plot[metadata_for_plot$qc_passing.MTGnCgG_20Pct == T, ] # as appropriate
+
+confusion_martix_hold <- as.matrix(table(metadata_for_plot$Subcluster, metadata_for_plot$predicted.id.MTGnCgG_20Pct)) # for mathys 
+confusion_martix_hold <- as.matrix(table(metadata_for_plot$subtype, metadata_for_plot$predicted.id.MTGnCgG_20Pct)) # for cain 
+confusion_martix_hold <- as.matrix(confusion_martix_hold)
+confusion_martix_hold <- (confusion_martix_hold/rowSums(confusion_martix_hold))*100
+
+# plot heatmap
+
+display.brewer.all()
+dev.off() #as needed to reset graphics
+
+pheatmap::pheatmap(confusion_martix_hold, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+#pheatmap::pheatmap(confusion_martix_hold_filt, treeheight_row = 0, treeheight_col = 0, color = brewer.pal(9 ,"Blues"), cluster_rows = F, cluster_cols = F)
+
+### plot in ggplot
+
+melted_conf_mtx <- melt(t(confusion_martix_hold[nrow(confusion_martix_hold):1,]))
+
+Cain_filtered <- ggplot(melted_conf_mtx, aes(Var1,Var2, fill=value)) + 
+  geom_raster() +
+  scale_fill_gradientn(colours = brewer.pal(9 ,"Blues")) +
+  theme_classic() +
+  xlab("Mapped subclass") + 
+  ylab("Pre-map cell group by Cain et al.") +
+  labs(fill = "% of pre- \n map cells") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.4, hjust = 1),
+        axis.title.y =  element_text(margin = margin(t = 0, r = 5, b = 0, l = 0))) +
+  theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank()) +
+  theme(legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,-10),
+        axis.line.y = element_blank(),
+        axis.line.x = element_blank()) 
+
+plot_grid(Mathys_unfiltered,
+          Cain_unfiltered,
+          labels = c("a)", "b)"),
+          label_size = 10,
+          hjust = -0.15,
+          align = "hv",
+          ncol = 1)
+
+### export plot (most recently plotted)
+
+ggsave(width = 180,
+       height = 360,
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Heatmap/",
+       filename = "MTGnCgG_vs_Orig_Unfiltered.pdf",
+       device = "pdf")
+
+#
+#### lm of snCTPs and for rosmap factors (CgG Unfiltered; pilot/initial use case) ####
 
 ### Load the datasets
 
@@ -398,7 +473,7 @@ beta_coefs_non_meta_df_combined %>% filter(term == 'LOADAD', class == "Glutamate
   xlab('')
 
 
-#### template for All mapped identity proportions' lm analysis ####
+#### template for All (even if a group is not mapped in a given dataset) mapped identity proportions' lm analysis ####
 
 ### Load the datasets
 
@@ -450,7 +525,7 @@ remove(test)
 
 # for troubleshooting the above function (basically convert the above into for loops):
 
-beta_coefs_non_meta_df_ALL <- beta_coefs_non_meta_df[0,c(2:7,1)] # first time
+beta_coefs_non_meta_df_ALL <- model_df[0,] # first time (run the loop below, get model df as a template)
 
 for (curr_dataset in unique(ad_snrnaseq_df$dataset)) {
   print(curr_dataset)
@@ -643,3 +718,136 @@ write.csv(beta_coefs_non_meta_df_ALL, "/external/rprshnas01/kcni/ychen/git/Marke
 
 
 
+
+#### lm of mapped identity proportions' (MTGnCgG top 20 pct most var genes) with rosmap factors ####
+
+### Load the datasets
+
+cain_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/MTGnCgG_20Pct/Filtered/cain_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+mathys_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/MTGnCgG_20Pct/Filtered/mathys_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+zhou_cell_type_prop_df <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/MTGnCgG_20Pct/Filtered/zhou_cell_type_prop_df.csv", row.names=1, stringsAsFactors=TRUE)
+
+### lm 
+
+### adjustments to and combining of imported datasets
+
+cain_cell_type_prop_df$dataset <- "Cain"
+zhou_cell_type_prop_df$dataset <- "Zhou"
+mathys_cell_type_prop_df$dataset <- "Mathys"
+
+identical(colnames(cain_cell_type_prop_df), colnames(mathys_cell_type_prop_df)) #checks before rbind all together
+identical(colnames(cain_cell_type_prop_df), colnames(zhou_cell_type_prop_df)) #checks before rbind all together
+
+ad_snrnaseq_df = bind_rows(mathys_cell_type_prop_df, cain_cell_type_prop_df, zhou_cell_type_prop_df)
+
+ad_snrnaseq_df$LOAD = factor(ad_snrnaseq_df$LOAD, levels = c('C', 'AD', 'OTHER'))
+ad_snrnaseq_df$dataset = factor(ad_snrnaseq_df$dataset, levels = c('Mathys', 'Cain', 'Zhou'))
+ad_snrnaseq_df$msex = factor(ad_snrnaseq_df$msex)
+str(ad_snrnaseq_df)
+
+### some checks
+
+# tally of individuals by case and dataset
+ad_snrnaseq_df %>% select(projid, dataset, LOAD) %>%
+  distinct(.keep_all = T) %>% group_by(dataset, LOAD) %>% tally()
+
+# plot of data for SST
+ad_snrnaseq_df %>% 
+  filter(subclass == 'SST', LOAD %in% c('C', 'AD')) %>% 
+  ggplot(aes(x = LOAD, y = cell_type_proportion * 100)) + 
+  geom_boxplot(outlier.shape = NA, ) + 
+  geom_quasirandom() + 
+  facet_wrap(~dataset, scales = 'free_x') + 
+  ylab('SST snCTP (%)') + 
+  xlab('')
+
+### calculate LOAD beta coefficients
+
+# check for cases where all counts of a cell type = zero (mean would = exactly 0) for C and AD LOAD values
+test <- ad_snrnaseq_df %>% select(cell_type_proportion, projid, subclass, dataset, LOAD) %>% filter(LOAD %in% c('C', 'AD')) %>%
+  group_by(subclass, dataset, LOAD) %>% summarize(mean_prop = mean(cell_type_proportion, na.rm = TRUE))
+test[test$mean_prop == 0, c("subclass", "dataset")]
+remove(test)
+
+# for troubleshooting the above function (basically convert the above into for loops):
+
+beta_coefs_non_meta_df_ALL <- model_df[0,] # first time (run the loop below, get model df as a template)
+
+for (curr_dataset in unique(ad_snrnaseq_df$dataset)) {
+  print(curr_dataset)
+  temp_df <- ad_snrnaseq_df[ad_snrnaseq_df$dataset == curr_dataset, ]
+  cell_type_list <- unique(temp_df$subclass)
+
+  for (curr_cell_type in cell_type_list){
+    print(curr_cell_type)
+    df = temp_df %>% filter(LOAD %in% c('C', 'AD'))
+    df = df[df$subclass == curr_cell_type, ]
+    my_model = lm('scale(cell_type_proportion) ~ scale(age_death) + factor(msex) + scale(pmi) + LOAD ',
+                  data = df)
+    model_df = tidy(my_model)
+    model_df$dataset = curr_dataset
+    model_df$subclass = curr_cell_type
+    model_df$mapping = "MTGnCgG_Top20PctMostVar" # as appropriate
+    model_df$filtering = "Unfiltered" # as appropriate
+    beta_coefs_non_meta_df_ALL <- bind_rows(beta_coefs_non_meta_df_ALL, model_df)
+  }
+  
+}
+
+beta_coefs_non_meta_df_backup <- beta_coefs_non_meta_df_ALL # as desired
+table(beta_coefs_non_meta_df_ALL$dataset, beta_coefs_non_meta_df_ALL$filtering, exclude = "ifany")
+
+### Plot results
+
+# final adjustments to metadata/factors
+
+beta_coefs_non_meta_df_ALL$dataset = factor(beta_coefs_non_meta_df_ALL$dataset, levels = c('Mathys', 'Cain', "Zhou"))
+beta_coefs_non_meta_df_ALL$filtering = factor(beta_coefs_non_meta_df_ALL$filtering, levels = c('Unfiltered', 'Filtered'))
+
+Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
+subclass_meta <- unique(Seu_ref_object@meta.data[,c("subclass_label", "class_label")])
+length(intersect(beta_coefs_non_meta_df_ALL$subclass, subclass_meta$subclass_label)) #check
+remove(Seu_ref_object)
+beta_coefs_non_meta_df_ALL = merge(beta_coefs_non_meta_df_ALL, subclass_meta, by.x = 'subclass', by.y = 'subclass_label') #cgg mapping
+colnames(beta_coefs_non_meta_df_ALL)[10] <- "class"
+
+#save
+
+write.csv(beta_coefs_non_meta_df_ALL, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/sn_cell_type_proportions/LOADAD_lm_results/beta_coefs_non_meta_df_MTGnCgG_20Pct.csv")
+
+### plots beta coefficients for LOAD across each dataset faceted by cell type
+
+Unfiltered_lm <- beta_coefs_non_meta_df_ALL %>% filter(term == 'LOADAD', filtering == "Unfiltered") %>% 
+  ggplot(aes(x = subclass, y = estimate, fill = class)) + 
+  geom_hline(yintercept = 0) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values=c("red", "blue", "grey")) + 
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error) , width = .33) + 
+  facet_grid(dataset ~ class, scales = "free", space = "free") + 
+  theme_classic() +
+  ylab('LOAD (std. Beta)') + 
+  xlab('') +
+  theme(legend.position = "none") 
+
+# combined plot
+
+plot_grid(Filtered_lm,
+          Unfiltered_lm,
+          labels = c("a)", "b)"),
+          label_size = 10,
+          hjust = -0.15,
+          align = "hv",
+          ncol = 1)
+
+# export plot (most recently plotted)
+
+ggsave(width = 360,
+       height = 360,
+       dpi = 300, 
+       units = "mm", 
+       limitsize = F,
+       path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Lm_betas/",
+       filename = "MTGnCgG20Pct_LOADADbeta.pdf",
+       device = "pdf")
+
+#
