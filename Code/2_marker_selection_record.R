@@ -633,6 +633,167 @@ colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","
 write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_class_ITexpand_WL35IT_lfct11_minpct15_dup.csv") #save/export results
 
 #
+#### get RANKED markers from all of hodge for excitatory class, inhibitory class, and non-neuronal subclasses ####
+
+### initial setup
+
+library(Seurat)
+library(MAST)
+library(dplyr)
+library(tidyverse)
+library(tibble)
+
+Seu_AIBS_obj <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
+table(Seu_AIBS_obj$outlier_call, exclude = "ifany") #check for outliers
+table(Seu_AIBS_obj$NeuN_Region, exclude = "ifany") #check our data composition
+
+### make new metadata column
+
+Seu_AIBS_obj$InhExc_label_NonNsubclass <- Seu_AIBS_obj$subclass_label_expanded #make new variable, starting from subclasses
+
+Seu_AIBS_obj$InhExc_label_NonNsubclass[Seu_AIBS_obj$class_label == "GABAergic"] <- "GABAergic" # set GABAergic
+Seu_AIBS_obj$InhExc_label_NonNsubclass[Seu_AIBS_obj$class_label == "Glutamatergic"] <- "Glutamatergic" # set Glutamatergic
+
+Idents(Seu_AIBS_obj) <- "InhExc_label_NonNsubclass"
+table(Idents(Seu_AIBS_obj)) #double check what subclasses we have and that they're set as active identity
+
+### find markers
+
+new_AIBS_markers_mast_GaGluGli <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.1, min.pct = .15, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_GaGluGli <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 1.1, min.pct = .15, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### finalize df
+
+new_AIBS_markers_mast_GaGluGli$group_gene <- paste0(new_AIBS_markers_mast_GaGluGli$cluster, "_", new_AIBS_markers_mast_GaGluGli$gene)
+new_AIBS_markers_roc_GaGluGli$group_gene <- paste0(new_AIBS_markers_roc_GaGluGli$cluster, "_", new_AIBS_markers_roc_GaGluGli$gene)
+
+length(intersect(new_AIBS_markers_mast_GaGluGli$group_gene, new_AIBS_markers_roc_GaGluGli$group_gene)) #see intersect of marker genes
+Result_df <- merge(new_AIBS_markers_roc_GaGluGli, new_AIBS_markers_mast_GaGluGli, by = "group_gene", all.x = TRUE, all.y = TRUE) #combine the marker df; may want to double check the indices/order
+
+test <- Result_df[complete.cases(Result_df),]
+identical(test$avg_log2FC.x, test$avg_log2FC.y)
+identical(test$pct.1.x, test$pct.1.y)
+identical(test$pct.2.x, test$pct.2.y)
+identical(test$cluster.x, test$cluster.y)
+identical(test$gene.x, test$gene.y) # as appropriate
+remove(test)
+
+Result_df <- Result_df %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df <- Result_df %>% mutate(avg_log2FC = coalesce(avg_log2FC.x, avg_log2FC.y))
+Result_df <- Result_df %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df <- Result_df %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+Result_df <- Result_df %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df <- Result_df[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "avg_diff", "myAUC", "power", "p_val", "p_val_adj")]
+
+Result_df <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+colnames(Result_df)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_NClass_GliaSubclass_lfct11_minpct15_dup.csv") #save/export results
+
+### Ranking (copied, essentially, from Z99_Shreejoy_marker_ranking_SCadapted_IDupdate.R)
+
+# read in gene info off the SCC
+aibs_gene_info = read_csv('/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_MTG_Smartseq_2018/human_MTG_2018-06-14_genes-rows.csv')
+aibs_gene_info = aibs_gene_info %>% mutate(gene_name_in_r = make.names(gene))
+
+# this adds back in entrez ids for all genes (assumes names haven't changed)
+all_markers_ranked_w_entrez = left_join(Result_df %>% dplyr::select(-entrez_id, -ensembl_id), 
+                                        aibs_gene_info %>% dplyr::select(-gene_name, -mouse_homologenes, -chromosome), by = c("gene" = "gene_name_in_r")) %>% 
+  dplyr::select(-gene.y) ### not used gene name in r? also, left join from full join
+
+# get hgnc gene mapping from website
+hgnc_mapping = read_tsv(url('http://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/tsv/hgnc_complete_set.txt'))
+#hgnc_mapping = read_tsv('/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Inputs/hgnc_complete_set.txt')
+
+
+# now, this is the list of sonnys markers with entrez ids and ensembl ids where possible
+all_markers_ranked_w_ids = left_join(all_markers_ranked_w_entrez, 
+                                     hgnc_mapping %>% dplyr::select(entrez_id, ensembl_gene_id) %>% dplyr::rename(ensembl_id = ensembl_gene_id)) %>% 
+  dplyr::select(gene, entrez_id, ensembl_id, everything()) 
+
+
+## now, read in the seurat object for the all regions hodge data and then add the extra columns
+Seu_AIBS_obj = readRDS('/external/rprshnas01/netdata_kcni/stlab/Public/Seurat_objects/Seu_AIBS_obj_update_07JUN21.rds')
+
+# i decided to only calculate the extra fields for things that were calcualted after findallmakrers
+use_markers = all_markers_ranked_w_ids %>% pull(gene)
+
+gene_List <- rownames(Seu_AIBS_obj[["RNA"]]@data) %>% unlist
+
+matching_inds = which(gene_List %in% use_markers)
+use_genes = gene_List[matching_inds]
+
+transposed_lnCPM_matrix <- t(as.matrix(Seu_AIBS_obj[["RNA"]]@data[matching_inds, ])) %>% as.data.frame() #get transposed lnCPM matrix 
+# format count/expression matrix for group_dot_plot smooth running
+
+transposed_lnCPM_matrix <- rownames_to_column(transposed_lnCPM_matrix, var = 'sample_name') #get sample names as a column
+colnames(transposed_lnCPM_matrix)[1] <- "sample_name" #change column name of sample names (to match AIBS vignette on group_dot_plot)
+rownames(transposed_lnCPM_matrix) <- transposed_lnCPM_matrix$sample_name #reset df rownames as sample names as well, just in case
+
+# further adding and tweeking data in metadata dataframe to suite group_dot_plot
+gdp_anno <- as.data.frame(Seu_AIBS_obj@meta.data) #create metadata copy for group_dot_plot
+gdp_anno$sample_name = row.names(gdp_anno)
+gdp_anno$InhExc_label_NonNsubclass_label = gdp_anno$InhExc_label_NonNsubclass
+gdp_anno$InhExc_label_NonNsubclass_id = gdp_anno$InhExc_label_NonNsubclass_
+gdp_anno$InhExc_label_NonNsubclass__color = 'grey'
+
+new = full_join(transposed_lnCPM_matrix, gdp_anno %>% dplyr::select(sample_name, InhExc_label_NonNsubclass))
+
+# calculates averages of gene expression from every cell type using a trimmed mean - takes a while to run
+cell_type_avgs = new %>% dplyr::select(-sample_name) %>% 
+  group_by(InhExc_label_NonNsubclass) %>% 
+  summarise_all(mean) ### changed to not trimmed mean
+
+# this is a long data frame that merges subclass info with the cell type gene averages computed above
+cell_type_avgs_long = cell_type_avgs %>% 
+  pivot_longer(-InhExc_label_NonNsubclass, 
+               names_to = 'gene', values_to = 'avg_expr')
+
+# now we go through and calculate the top_log2FC feature, 
+# we do this in two steps, we first calculate it for the condition where the subclass is most strongly expressing the gene
+
+top_genes_per_type = cell_type_avgs_long %>% 
+  group_by(gene) %>% 
+  top_n(n = 2, wt = avg_expr) %>% # this gets the top two highest expressing subclasses expressing the gene
+  arrange(-avg_expr) %>% # sorts them
+  mutate(top_log2FC = log2(avg_expr[1]) - log2(avg_expr[2])) %>% # and then calculates top_log2FC
+  top_n(n = 1, wt = avg_expr) %>% # gets the top highest expressing subclass
+  dplyr::rename(subclass = InhExc_label_NonNsubclass)
+
+
+
+# now this goes through all of the other subclasses to find their top_log2FC if they're not the highest expressing gene per subclass
+df1 = top_genes_per_type %>% 
+  dplyr::select(gene, avg_expr) %>% 
+  dplyr::rename(top_avg_expr = avg_expr)
+top_markers_second_best = inner_join(df1, cell_type_avgs_long %>% 
+                                       dplyr::rename(subclass = InhExc_label_NonNsubclass)) %>% 
+  mutate(top_log2FC = log2(avg_expr) - log2(top_avg_expr)) %>% dplyr::select(-top_avg_expr) %>% 
+  filter(!top_log2FC == 0) # this last part removes subclasses for genes that are the highest expressing subclass per gene, as they're calculated in the first part
+
+# this creates a new data frame which has the extra columns we wanted to calculate
+extra_cols_df = bind_rows(top_genes_per_type, top_markers_second_best) %>% dplyr::select(gene, subclass, avg_expr, top_log2FC) %>% arrange(gene)
+
+# this now is the final unranked data frame
+final_markers_df_unranked = left_join(all_markers_ranked_w_ids, extra_cols_df)  %>%  # left join as many matching column names as detected?
+  dplyr::distinct(gene, ensembl_id, subclass, .keep_all = T) ### made this unnecessary by my top leftjoin?
+
+
+# this generates the final list of markers, creates a few columns which are slightly different ways of ranking the genes
+# shreejoy's favorite is the column bretigea_ranking_best, which is like the bretigea ranking plus adding a term to rank by descending pct.2
+final_markers_df_ranked = final_markers_df_unranked %>% 
+  dplyr::select(gene, entrez_id, ensembl_id, everything()) %>% 
+  group_by(subclass) %>% 
+  mutate(bretigea_ranking = rank(desc((rank(avg_log2FC) + rank(top_log2FC) + rank(avg_expr))))) %>% # this is the implementation of ranking in the bretigea paper
+  mutate(dan_ranking = rank(desc((rank(avg_log2FC) + rank(top_log2FC) )))  ) %>% # this is dan's suggestion - this strongly empahsizing specificity
+  mutate(bretigea_ranking_best = rank(desc((rank(avg_log2FC) + rank(top_log2FC) + rank(avg_expr) + rank(desc(pct.2)))))  ) %>% # this seems to be a good balance of specificity and sensitivity
+  ungroup(subclass) %>%
+  arrange(subclass, bretigea_ranking_best) 
+
+# this writes the final ranked markers to a file
+write_csv(final_markers_df_ranked, file = '/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/Ranked_markers_noTrim_ALLReg_NClass_GliaSubclass_lfct11_minpct15_dup.csv')
+
+#
 #### get markers by pairwise comparisons between specific subclasses ####
 
 ### filter data
