@@ -191,6 +191,11 @@ Cain_cell_metadata <- readr::read_csv("/external/rprshnas01/external_data/rosmap
 Cain_gene_metadata <- readr::read_csv("/external/rprshnas01/netdata_kcni/dflab/data/rosmap/rnaseq/syn21589957/ROSMAP_Brain.snRNAseq_metadata_genes_20201107.csv")
 Cain_COO_matrix <- readr::read_csv("/external/rprshnas01/netdata_kcni/dflab/data/rosmap/rnaseq/syn21589957/ROSMAP_Brain.snRNAseq_counts_sparse_format_20201107.csv.gz")
 
+Cain_cell_metadata <- readr::read_csv("/external/rprshnas01/external_data/rosmap/rnaseq/syn21589957/ROSMAP_Brain.snRNAseq_counts_sparse_format_20201107.csv.gz")
+Cain_gene_metadata <- readr::read_csv("/external/rprshnas01/external_data/rosmap/rnaseq/syn21589957/ROSMAP_Brain.snRNAseq_metadata_genes_20201107.csv")
+Cain_COO_matrix <- readr::read_csv("/external/rprshnas01/external_data/rosmap/rnaseq/syn21589957/ROSMAP_Brain.snRNAseq_counts_sparse_format_20201107.csv.gz")
+
+
 identical(as.numeric(row.names(Cain_COO_matrix)), as.numeric(Cain_COO_matrix$X1)) #check that indexes/rownames are the same
 
 ### format/assemble count matrix

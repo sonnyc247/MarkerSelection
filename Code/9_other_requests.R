@@ -173,3 +173,38 @@ ggsave(width = 180,
        path = "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/Figures/Misc/",
        filename = "Genetech_Boxplots.pdf",
        device = "pdf")
+
+#### Marker lists for publication ####
+
+common_markers <- readRDS("/external/rprshnas01/kcni/ychen/collabgit/rctp/commonMarkerLists/subclass_CgG_MTG_common_final.rds")
+common_markers <- unlist(common_markers)
+common_markers <- as.data.frame(table(common_markers))
+common_markers$Freq <- TRUE
+colnames(common_markers) <- c("gene", "used")
+
+initial_markers <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/MTG_and_CgG_lfct2/new_MTGnCgG_lfct2.5_results.csv")
+
+initial_markers <- merge(initial_markers, common_markers, by = "gene", all.x = T)
+initial_markers[is.na(initial_markers$used), "used"] <- FALSE 
+
+write.csv(initial_markers, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/MTG_and_CgG_lfct2/new_MTGnCgG_lfct2.5_usen.csv")
+
+### finalize publication table
+
+initial_markers <- initial_markers[,-c(2,13)]
+library(tidyverse)
+
+colnames(initial_markers) <- c("Gene",
+                               "Entrez gene ID",
+                               "Ensembl gene ID",
+                               "Subclass",
+                               "Prevalence in subclass ('pct.1')",
+                               "Prevalence in all other cells ('pct.2')",
+                               "Average log fold change",
+                               "AUC from ROC test",
+                               "Power from ROC test",
+                               "Mast test p",
+                               "Mast test FDR",
+                               "Used in MGP")
+
+write.csv(initial_markers, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/MTG_and_CgG_lfct2/new_MTGnCgG_lfct2.5_Publication.csv")
