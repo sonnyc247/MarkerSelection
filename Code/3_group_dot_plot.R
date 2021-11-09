@@ -172,15 +172,15 @@ marker_reference <- marker_reference[,-c(1,3)]
 gene_list <- as.character(marker_reference[marker_reference$subclass %in% c("SST", "IT") &
                               marker_reference$used == T, "gene"]) # get list of genes
 #gene_list <- intersect(gene_list, row.names(Seu_plot_object)) # intersect genes with Seurat object for plotting
-gene_list <- gene_list[-3] # remove CORT which isn't in Cain
-gene_list[8] <- "LY86-AS1"
+#gene_list <- gene_list[-3] # remove CORT which isn't in Cain
+#gene_list[8] <- "LY86-AS1"
 gdp_data <- GetAssayData(Seu_plot_object, slot = "data")[gene_list,] # get lnCPM matrix
 gdp_data <- as.matrix(gdp_data) # convert to non-sparse matrix
 gdp_data <- t(gdp_data) #get transposed lnCPM matrix
 gdp_data <- rownames_to_column(as.data.frame(gdp_data)) #get sample names as a column
-colnames(gdp_data)[1] <- "sample_name" #change column name of sample names (to match AIBS vignette on group_dot_plot)
+colnames(gdp_data)[1] <- "sample_names" #change column name of sample names (to match AIBS vignette on group_dot_plot)
 rownames(gdp_data) <- gdp_data$sample_name #reset df rownames as sample names as well, just in case
-colnames(gdp_data)[9] <- "LY86.AS1"
+#colnames(gdp_data)[9] <- "LY86.AS1"
 
 #metadata/cell annotations
 gdp_anno <- as.data.frame(Seu_plot_object@meta.data) #create metadata copy for group_dot_plot
@@ -240,14 +240,14 @@ gdp_markers <- intersect(gdp_markers, colnames(gdp_data))
 
 # do the plot
 
-gdp_SST <- group_dot_plot(gdp_data, 
-                            gdp_anno, 
-                            genes = gdp_markers, 
-                            grouping = "subclass", 
-                            log_scale = TRUE,
-                            font_size = 8,
-                            max_size = 20,
-                            rotate_counts = TRUE)
+gdp_SST_AIBS <- group_dot_plot(gdp_data, 
+                               gdp_anno,
+                               genes = gdp_markers,
+                               grouping = "subclass",
+                               log_scale = TRUE,
+                               font_size = 8,
+                               max_size = 20,
+                               rotate_counts = TRUE)
 
 # combine plots as appropriate/needed
 

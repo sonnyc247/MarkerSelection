@@ -207,4 +207,30 @@ colnames(initial_markers) <- c("Gene",
                                "Mast test FDR",
                                "Used in MGP")
 
+initial_markers$Subclass <- factor(initial_markers$Subclass, levels = c("LAMP5",
+                                                                        "PAX6",
+                                                                        "VIP",
+                                                                        "SST",
+                                                                        "PVALB",
+                                                                        "IT",
+                                                                        "L4 IT",
+                                                                        "L5/6 NP",
+                                                                        "L5 ET",
+                                                                        "L6 CT",
+                                                                        "L5/6 IT Car3",
+                                                                        "L6b",
+                                                                        "Astrocyte",
+                                                                        "Endothelial",
+                                                                        "Microglia",
+                                                                        "Oligodendrocyte", 
+                                                                        "OPC",
+                                                                        "Pericyte",
+                                                                        "VLMC"))
+
+colnames(initial_markers)[7] <- "temp"
+
+initial_markers <- initial_markers %>% arrange(Subclass, desc(temp))
+
+colnames(initial_markers)[7] <- "Average log fold change"
+
 write.csv(initial_markers, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/MTG_and_CgG_lfct2/new_MTGnCgG_lfct2.5_Publication.csv")
