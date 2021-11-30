@@ -174,7 +174,7 @@ ggsave(width = 180,
        filename = "Genetech_Boxplots.pdf",
        device = "pdf")
 
-#### Marker lists for publication ####
+#### Marker lists for Consens et al ####
 
 common_markers <- readRDS("/external/rprshnas01/kcni/ychen/collabgit/rctp/commonMarkerLists/subclass_CgG_MTG_common_final.rds")
 common_markers <- unlist(common_markers)
@@ -234,3 +234,58 @@ initial_markers <- initial_markers %>% arrange(Subclass, desc(temp))
 colnames(initial_markers)[7] <- "Average log fold change"
 
 write.csv(initial_markers, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/MTG_and_CgG_lfct2/new_MTGnCgG_lfct2.5_Publication.csv")
+
+#### Marker lists for Hunter et al ####
+
+common_markers <- readRDS("/external/rprshnas01/kcni/ychen/collabgit/Aging-Expression-Analysis/Figures: Code and Data/used_celltype_markers.rds")
+common_markers <- unlist(common_markers)
+common_markers <- as.data.frame(table(common_markers))
+common_markers$Freq <- TRUE
+colnames(common_markers) <- c("gene", "used")
+
+initial_markers <- read.csv("/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/CgG/new_CgG_results_SubclassWithExc.csv")
+
+initial_markers <- merge(initial_markers, common_markers, by = "gene", all.x = T)
+initial_markers[is.na(initial_markers$used), "used"] <- FALSE 
+
+### finalize publication table
+
+initial_markers <- initial_markers[,-c(2,9)]
+library(tidyverse)
+
+colnames(initial_markers)
+colnames(initial_markers) <- c("Gene",
+                               "Entrez gene ID",
+                               "Ensembl gene ID",
+                               "Cell group",
+                               "Prevalence in cell group ('pct.1')",
+                               "Prevalence in all other cells ('pct.2')",
+                               "Average log2 fold change",
+                               "AUC from ROC test",
+                               "Power from ROC test",
+                               "Mast test p",
+                               "Mast test FDR (q)",
+                               "Used in MGP")
+
+unique(initial_markers$`Cell group`)
+initial_markers$`Cell group` <- factor(initial_markers$`Cell group`, levels = c("SST",
+                                                                        "VIP",
+                                                                        "PVALB",
+                                                                        "LAMP5",
+                                                                        "Excitatory",
+                                                                        "OPC",
+                                                                        "Microglia",
+                                                                        "Pericyte",
+                                                                        "Endothelial",
+                                                                        "Oligodendrocyte",
+                                                                        "VLMC",
+                                                                        "Astrocyte",
+                                                                        "PAX6"))
+
+colnames(initial_markers)[c(4,7)] <- c("temp2", "temp")
+
+initial_markers <- initial_markers %>% arrange(temp2, desc(temp))
+
+colnames(initial_markers)[c(4,7)] <- c("Cell group" ,"Average log2 fold change")
+
+write.csv(initial_markers, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/CgG/new_CgG_results_SubclassWithExc_publication.csv")
