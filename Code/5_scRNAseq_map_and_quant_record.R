@@ -1298,7 +1298,7 @@ write.csv(export_holder, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Da
 
 # load Seu objects
 
-Seu_ref_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_AIBS_obj_update_07JUN21.rds")
+Seu_ref_object <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Public/Seurat_objects/Seu_AIBS_obj_update_07JUN21.rds")
 
 Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_mathys_obj_update_08Jun21.rds") #load mathys seurat object
 Seu_map_object <- readRDS("~/git/Ex_Env_Storage/MarkerSelection/Seu_cain_obj_update_11JUN21.rds") #load cain seurat object (instead)

@@ -1138,3 +1138,65 @@ ggplot(mathys_markers_mega_mast[mathys_markers_mega_mast$volcano_group == "Hodge
   facet_wrap(~cluster, scales = "fixed") +
   theme(legend.position = "none")
 
+
+#### get markers from all of hodge for excitatory class but all other subclass ####
+
+### initial setup
+
+library(Seurat)
+library(MAST)
+library(dplyr)
+
+Seu_AIBS_obj <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Public/Seurat_objects/Seu_AIBS_obj_update_07JUN21.rds")
+
+table(Seu_AIBS_obj$outlier_call, useNA = "always") #check for outliers
+table(Seu_AIBS_obj$NeuN_Region, useNA = "always") #check our data composition
+
+Seu_AIBS_obj$ExClass_OtherSubclass <- Seu_AIBS_obj$subclass_label # make custom metadata column, starting from subclasses
+
+Seu_AIBS_obj$ExClass_OtherSubclass[Seu_AIBS_obj$ExClass_OtherSubclass %in% c("IT",
+                                                                             "L4 IT",
+                                                                             "L5 ET",
+                                                                             "L5/6 IT Car3",
+                                                                             "L5/6 NP",
+                                                                             "L6 CT",
+                                                                             "L6b")] <- "Excitatory" #set to excitatory
+
+table(Seu_AIBS_obj$ExClass_OtherSubclass, useNA = "always") #check our data composition
+
+Idents(Seu_AIBS_obj) <- "ExClass_OtherSubclass"
+table(Idents(Seu_AIBS_obj))
+
+new_AIBS_markers_mast_All_aging <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "MAST") #find markers
+new_AIBS_markers_roc_All_aging <- FindAllMarkers(Seu_AIBS_obj, slot = "data", logfc.threshold = 2.5, min.pct = .35, only.pos = TRUE, return.thresh = .05, test.use = "roc") #find markers using roc
+
+### for mast
+length(unique(new_AIBS_markers_mast_All_aging$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_mast_All_aging[duplicated(new_AIBS_markers_mast_All_aging$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_mast_All_aging <- new_AIBS_markers_mast_All_aging[!(new_AIBS_markers_mast_All_aging$gene %in% dup_list),] #remove duplicated marker genes
+
+### for roc
+length(unique(new_AIBS_markers_roc_All_aging$gene)) #check for unique marker genes
+dup_list <- unique(new_AIBS_markers_roc_All_aging[duplicated(new_AIBS_markers_roc_All_aging$gene),"gene"]) #list of duplicated genes
+new_AIBS_markers_roc_All_aging <- new_AIBS_markers_roc_All_aging[!(new_AIBS_markers_roc_All_aging$gene %in% dup_list),] #remove duplicated marker genes
+
+length(intersect(new_AIBS_markers_mast_All_aging$gene, new_AIBS_markers_roc_All_aging$gene)) #see intersect of marker genes
+
+### combine
+new_AIBS_markers_mast_All_aging$group_gene <- paste0(new_AIBS_markers_mast_All_aging$cluster, "_", new_AIBS_markers_mast_All_aging$gene)
+new_AIBS_markers_roc_All_aging$group_gene <- paste0(new_AIBS_markers_roc_All_aging$cluster, "_", new_AIBS_markers_roc_All_aging$gene)
+
+Result_df_HodgeAging <- merge(new_AIBS_markers_roc_All_aging, new_AIBS_markers_mast_All_aging, by = "group_gene", all.x = T, all.y = T) #combine the marker df
+
+Result_df_HodgeAging <- Result_df_HodgeAging %>% mutate(gene = coalesce(gene.x, gene.y))
+Result_df_HodgeAging <- Result_df_HodgeAging %>% mutate(cluster = coalesce(cluster.x, cluster.y))
+Result_df_HodgeAging <- Result_df_HodgeAging %>% mutate(avg_log2FC = coalesce(avg_log2FC.x, avg_log2FC.y))
+Result_df_HodgeAging <- Result_df_HodgeAging %>% mutate(pct.1 = coalesce(pct.1.x, pct.1.y))
+Result_df_HodgeAging <- Result_df_HodgeAging %>% mutate(pct.2 = coalesce(pct.2.x, pct.2.y))
+Result_df_HodgeAging <- Result_df_HodgeAging[,c("gene", "cluster", "pct.1", "pct.2", "avg_log2FC", "avg_diff", "myAUC", "power", "p_val", "p_val_adj")]
+
+Gene_anno <- read.csv("./Data/Inputs/Gene_anno.csv", row.names = 1)
+Result_df_HodgeAging <- merge(Gene_anno[,c("gene", "entrez_id", "ensembl_gene_id")], Result_df_HodgeAging, by = "gene", all.y = TRUE) #add entrez and ensembl ids, keeping all results, even if they don't have a corresponding entry from Gene-Anno
+colnames(Result_df_HodgeAging)[c(3:4,8:12)] <- c("ensembl_id", "subclass", "roc_avg_diff","roc_myAUC", "roc_power", "MAST_p_val","MAST_p_val_adj") #rename some columns for clarity
+
+write.csv(Result_df_HodgeAging, "/external/rprshnas01/kcni/ychen/git/MarkerSelection/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_SubclassWithExc.csv") #save/export results

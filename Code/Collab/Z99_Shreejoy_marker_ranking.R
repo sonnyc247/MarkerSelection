@@ -2,7 +2,7 @@ library(tidyverse)
 
 ## read in and update sonny's markers with as many ensembl ids as possible
 
-all_markers_ranked_orig = read_csv(url('https://raw.githubusercontent.com/sonnyc247/MarkerSelection/master/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_ITexpand_WL35IT_lfct15_minpct25_dup.csv'))
+all_markers_ranked_orig = readr::read_csv(url('https://raw.githubusercontent.com/sonnyc247/MarkerSelection/master/Data/Outputs/CSVs_and_Tables/Markers/All_hodge_regions/new_ALLReg_results_ITexpand_WL35IT_lfct15_minpct25_dup.csv'))
 
 
 # i noticed that some of sonny's markers are missing ensembl ids, so i'm getting those from the raw data below
